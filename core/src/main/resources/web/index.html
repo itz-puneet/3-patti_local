@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#14532D">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="3 Patti">
-<title>3 Patti Tracker</title>
+<meta name="apple-mobile-web-app-title" content="3 Patti Chips">
+<title>3 Patti Chips Handler</title>
 <link rel="icon" href="data:,">
 <style>
 :root {
@@ -268,9 +268,9 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   }
 
   function renderJoin() {
-    document.title = "3 Patti Tracker";
+    document.title = "3 Patti Chips Handler";
     app.innerHTML = '<div class="wrap join">' + logo() +
-      "<h1>3 Patti Tracker</h1>" +
+      "<h1>3 Patti Chips Handler</h1>" +
       '<div class="muted center">Join the table on this WiFi. The host keeps the pot and the ledger.</div>' +
       '<input id="name" class="field" maxlength="20" autocomplete="nickname" autocapitalize="words" placeholder="Your name" value="' + esc(name) + '">' +
       '<div id="nameError" class="small neg" style="display:none">Enter your name first</div>' +
@@ -297,7 +297,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   }
 
   function renderClosed() {
-    document.title = "3 Patti Tracker";
+    document.title = "3 Patti Chips Handler";
     app.innerHTML = '<div class="wrap join">' + logo() + '<div class="bold center">' + esc(closedMessage) + "</div>" +
       btn("Join again", "leave") + "</div>";
   }
@@ -306,7 +306,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     var u = data, s = u.state, r = s.round;
     var myTurn = r && ((r.phase === "BETTING" && r.turnId === u.playerId) ||
       (r.phase === "SIDE_SHOW_REQUESTED" && r.sideShow && r.sideShow.targetId === u.playerId));
-    document.title = myTurn ? "Your turn · 3 Patti" : "3 Patti Tracker";
+    document.title = myTurn ? "Your turn · 3 Patti Chips" : "3 Patti Chips Handler";
     var html = '<div class="wrap"><header><div class="title">' + esc(s.tableName) + '</div><div class="small muted">Hosted by ' +
       esc(hostName(s)) + "</div></header>";
     if (status === "reconnecting") html += '<div class="banner">Lost the host. Reconnecting…</div>';

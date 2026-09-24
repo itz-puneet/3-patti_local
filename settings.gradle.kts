@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "3PattiTracker"
+rootProject.name = "3PattiChipsHandler"
 include(":core", ":app")

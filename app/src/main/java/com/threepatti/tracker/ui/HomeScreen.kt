@@ -13,9 +13,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -71,7 +71,12 @@ fun HomeScreen(
             Spacer(Modifier.height(20.dp))
             CardFan()
             Spacer(Modifier.height(16.dp))
-            Text("3 Patti Tracker", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "3 Patti Chips Handler",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+            )
             Hint(
                 "Keeps track of chips, bets and the pot while you play with real cards",
                 center = true,
@@ -131,7 +136,13 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             TextButton(onClick = { confirmDiscard = true }) { Text("Delete") }
-                            FilledTonalButton(onClick = { requireName(onResume) }) { Text("Resume as host") }
+                            Button(
+                                onClick = { requireName(onResume) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary,
+                                ),
+                            ) { Text("Resume as host") }
                         }
                     }
                 }

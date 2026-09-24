@@ -1,4 +1,4 @@
-# 3 Patti Tracker
+# 3 Patti Chips Handler
 
 An Android app for keeping track of chips while you play 3 Patti (Teen Patti) with **real cards**.
 One Android phone hosts the table and everyone else joins from their own phone over the local WiFi
@@ -11,9 +11,11 @@ down, so at the end it tells you exactly who pays whom.
 
 ## Install
 
-1. On each phone, open the [latest release](../../releases/latest) and download `3patti-tracker.apk`.
+1. On each phone, open the [latest release](../../releases/latest) and download `3patti-chips-handler.apk`.
 2. Open the file and allow installing from this source when Android asks.
 3. Install the same version on every phone. The host turns away phones with a different version.
+
+Works on Android 8 through Android 16.
 
 **iPhone (or any phone without the app):** nothing to install. The host opens
 **Invite players** and the iPhone scans the QR code with the camera, which opens the table in Safari.

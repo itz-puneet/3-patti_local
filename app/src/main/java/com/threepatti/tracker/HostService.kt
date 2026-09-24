@@ -67,14 +67,14 @@ class HostService : Service() {
     private fun acquireLocks() {
         if (wakeLock == null) {
             val power = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "3PattiTracker:host").apply {
+            wakeLock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "3PattiChips:host").apply {
                 setReferenceCounted(false)
                 acquire(12 * 60 * 60 * 1000L)
             }
         }
         if (wifiLock == null) {
             val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            wifiLock = wifi?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "3PattiTracker:host")?.apply {
+            wifiLock = wifi?.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "3PattiChips:host")?.apply {
                 setReferenceCounted(false)
                 acquire()
             }

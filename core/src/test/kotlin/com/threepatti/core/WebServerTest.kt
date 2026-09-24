@@ -100,7 +100,7 @@ class WebServerTest {
         val connection = URI("http://127.0.0.1:${server.port}/").toURL().openConnection() as HttpURLConnection
         assertEquals(200, connection.responseCode)
         assertTrue(connection.contentType.startsWith("text/html"))
-        assertTrue(connection.inputStream.bufferedReader().readText().contains("<title>3 Patti Tracker</title>"))
+        assertTrue(connection.inputStream.bufferedReader().readText().contains("<title>3 Patti Chips Handler</title>"))
         val missing = URI("http://127.0.0.1:${server.port}/nope").toURL().openConnection() as HttpURLConnection
         assertEquals(404, missing.responseCode)
     }

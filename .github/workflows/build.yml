@@ -29,12 +29,12 @@ jobs:
         run: ./gradlew :app:assembleRelease --stacktrace
 
       - name: Collect APK
-        run: cp app/build/outputs/apk/release/app-release.apk 3patti-tracker.apk
+        run: cp app/build/outputs/apk/release/app-release.apk 3patti-chips-handler.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: 3patti-tracker-apk
-          path: 3patti-tracker.apk
+          name: 3patti-chips-handler-apk
+          path: 3patti-chips-handler.apk
 
       - name: Publish as latest release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -42,8 +42,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest 3patti-tracker.apk \
-            --title "3 Patti Tracker (latest build)" \
-            --notes "Build ${GITHUB_RUN_NUMBER} from commit ${GITHUB_SHA::7}. Download 3patti-tracker.apk on every phone and install it." \
+          gh release create latest 3patti-chips-handler.apk \
+            --title "3 Patti Chips Handler (latest build)" \
+            --notes "Build ${GITHUB_RUN_NUMBER} from commit ${GITHUB_SHA::7}. Download 3patti-chips-handler.apk on every phone and install it." \
             --target "$GITHUB_SHA" \
             --latest
