@@ -173,10 +173,21 @@ fun TableSettings.gameName(): String = when {
     else -> "no-limit poker"
 }
 
+/** "ante ₹1" or "big blind ante ₹1 each", or null without an ante. */
+fun TableSettings.anteText(): String? = when {
+    !isPoker || ante <= 0 -> null
+    anteStyle == AnteStyle.BIG_BLIND -> "big blind ante ${formatMoney(ante, currency)} each"
+    else -> "ante ${formatMoney(ante, currency)}"
+}
+
 fun TableSettings.summary(): String {
     fun m(amount: Int) = formatMoney(amount, currency)
     if (isPoker) {
-        return "Blinds ${m(smallBlind)}/${m(bigBlind)} · ${if (betLimit == BetLimit.POT_LIMIT) "pot limit" else "no limit"}"
+        return listOfNotNull(
+            "Blinds ${m(smallBlind)}/${m(bigBlind)}",
+            anteText(),
+            if (betLimit == BetLimit.POT_LIMIT) "pot limit" else "no limit",
+        ).joinToString(" · ")
     }
     return listOfNotNull(
         "Boot ${m(bootAmount)}",

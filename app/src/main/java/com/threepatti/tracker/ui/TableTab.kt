@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -83,6 +85,7 @@ fun TableTab(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PotCard(state: GameState) {
     val round = state.round
@@ -122,8 +125,9 @@ private fun PotCard(state: GameState) {
                     fontWeight = FontWeight.Bold,
                 )
                 if (round.isActive && state.settings.isPoker) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)) {
                         StakeLabel("Blinds", "${state.money(state.settings.smallBlind)}/${state.money(state.settings.bigBlind)}")
+                        if (state.settings.ante > 0) StakeLabel("Ante", state.money(state.settings.ante))
                         if (round.phase == RoundPhase.BETTING) StakeLabel("Bet", state.money(round.currentBet))
                     }
                 } else if (round.isActive) {

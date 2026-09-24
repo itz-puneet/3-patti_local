@@ -353,6 +353,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         '<div class="amount">' + money(r.pot) + "</div>";
       if (isActive(r) && isPoker(s)) {
         html += "<div>Blinds <b>" + money(s.settings.smallBlind) + "/" + money(s.settings.bigBlind) + "</b>" +
+          (s.settings.ante > 0 ? " &nbsp; Ante <b>" + money(s.settings.ante) + "</b>" : "") +
           (r.phase === "BETTING" ? " &nbsp; Bet <b>" + money(r.currentBet) + "</b>" : "") + "</div>";
       } else if (isActive(r)) {
         html += "<div>Blind <b>" + money(r.stake) + "</b> &nbsp; Chaal <b>" + money(r.stake * 2) + "</b></div>";
@@ -552,6 +553,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       var set = data.state.settings;
       body = "<h3>Table rules</h3><div class=\"bold\">" + esc(data.rulesSummary) + '</div><div class="small muted">' + (isPoker(data.state) ?
         "• The two players after the dealer post the blinds, " + money(set.smallBlind) + " and " + money(set.bigBlind) + ". The dealer button moves one seat every hand.<br>" +
+        (set.ante > 0 ? (set.anteStyle === "BIG_BLIND" ? "• The big blind also pays an ante of " + money(set.ante) + " for every player." :
+          "• Everyone antes " + money(set.ante) + " before the blinds.") + " Antes go into the pot but don't count as a bet.<br>" : "") +
         "• Betting goes round four times: before the flop, after the flop, on the turn and on the river.<br>" +
         "• Check, call, bet or raise. A raise must be at least as big as the last bet or raise.<br>" +
         (set.betLimit === "POT_LIMIT" ? "• Pot limit: the most you can bet or raise is the size of the pot.<br>" : "• No limit: you can bet any amount up to all your chips.<br>") +

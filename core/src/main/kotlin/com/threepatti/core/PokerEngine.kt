@@ -33,6 +33,8 @@ internal object PokerEngine {
             round = draft.copy(smallBlindId = smallBlindId, bigBlindId = bigBlindId),
             lastDealerId = dealerId,
         ).withLog("Hand $number. ${state.nameOf(dealerId)} deals")
+        // Antes go in before the blinds, so a short stack's chips cover the ante first.
+        next = postAntes(next, bigBlindId)
         next = postBlind(next, smallBlindId, settings.smallBlind, "small blind")
         next = postBlind(next, bigBlindId, settings.bigBlind, "big blind")
         val short = state.players.filter { !it.sittingOut && it.balance == 0 }
@@ -41,7 +43,38 @@ internal object PokerEngine {
         return continueBetting(next, bigBlindId)
     }
 
+    /** Antes are dead money: they go into the pot but don't count towards anyone's bet in the betting round. */
+    private fun postAntes(state: GameState, bigBlindId: String): GameState {
+        val settings = state.settings
+        if (settings.ante <= 0) return state
+        val ids = state.round!!.hands.map { it.playerId }
+        if (settings.anteStyle == AnteStyle.BIG_BLIND) {
+            val total = settings.ante * ids.size
+            return postAnte(state, bigBlindId, total, "the big blind ante")
+        }
+        var next = state
+        for (id in ids) next = postAnte(next, id, settings.ante, null)
+        val allIn = ids.filter { next.round!!.hand(it)!!.allIn }
+        next = next.withLog("Everyone antes ${state.money(settings.ante)}")
+        if (allIn.isNotEmpty()) next = next.withLog("${next.namesOf(allIn)} ${if (allIn.size == 1) "is" else "are"} all-in from the ante")
+        return next
+    }
+
+    private fun postAnte(state: GameState, playerId: String, ante: Int, label: String?): GameState {
+        val amount = minOf(ante, state.player(playerId)!!.balance)
+        var next = state.pay(playerId, amount)
+        val allIn = next.player(playerId)!!.balance == 0
+        if (allIn) next = next.updateHand(playerId) { it.copy(allIn = true) }
+        return if (label == null) {
+            next
+        } else {
+            next.withLog("${state.nameOf(playerId)} posts $label ${state.money(amount)}${if (allIn) " and is all-in" else ""}")
+        }
+    }
+
     private fun postBlind(state: GameState, playerId: String, blind: Int, label: String): GameState {
+        // Already all-in from the ante: nothing left for the blind.
+        if (state.round!!.hand(playerId)!!.allIn) return state
         val amount = minOf(blind, state.player(playerId)!!.balance)
         var next = state.pay(playerId, amount).updateHand(playerId) { it.copy(streetBet = it.streetBet + amount) }
         val allIn = next.player(playerId)!!.balance == 0

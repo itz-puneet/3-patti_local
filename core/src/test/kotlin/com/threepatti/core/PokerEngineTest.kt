@@ -245,6 +245,72 @@ class PokerEngineTest {
     }
 
     @Test
+    fun everyoneAntesBeforeTheBlinds() {
+        var s = table(settings = noLimit.copy(ante = 1)).act(StartRound)
+        val round = s.round!!
+        assertEquals(6, round.pot, "3 antes + small blind + big blind")
+        assertEquals(listOf(99, 98, 97), s.players.map { it.balance })
+        assertEquals(2, round.currentBet, "antes don't count towards the bet to call")
+        assertEquals(listOf(0, 1, 2), round.hands.map { it.streetBet })
+        assertEquals(listOf(1, 2, 3), round.hands.map { it.invested })
+        assertEquals("p1", round.turnId)
+        assertTrue(s.log.any { it.text == "Everyone antes ₹1" })
+        assertEquals(2, PokerRules.options(s, "p1").toCall)
+        s = s.act(Call("p1")).act(Call("p2")).act(Check("p3"))
+        assertEquals(Street.FLOP, s.round!!.street)
+        assertEquals(9, s.round!!.pot)
+        assertChipsConserved(s)
+    }
+
+    @Test
+    fun bigBlindPaysTheAnteForEveryone() {
+        val s = table(settings = noLimit.copy(ante = 1, anteStyle = AnteStyle.BIG_BLIND)).act(StartRound)
+        assertEquals(6, s.round!!.pot)
+        assertEquals(listOf(100, 99, 95), s.players.map { it.balance })
+        assertEquals(2, s.round!!.hand("p3")!!.streetBet)
+        assertTrue(s.log.any { it.text == "Meena posts the big blind ante ₹3" })
+        assertChipsConserved(s)
+    }
+
+    @Test
+    fun shortStackIsAllInFromTheAnteAndOnlyWinsWhatTheyMatched() {
+        var s = table(settings = noLimit.copy(ante = 2)).act(AdjustChips("p3", -99)).act(StartRound)
+        val round = s.round!!
+        assertTrue(round.hand("p3")!!.allIn, "Meena had 1 chip and it went in as her ante")
+        assertEquals(0, round.hand("p3")!!.streetBet, "nothing left for her big blind")
+        assertEquals(2, round.currentBet, "the others still have to call the full big blind")
+        assertTrue(s.log.any { it.text == "Meena is all-in from the ante" })
+        s = s.act(Call("p1")).act(Call("p2"))
+        for (street in 1..3) s = s.act(Check("p2")).act(Check("p1"))
+        val pots = s.round!!.pots
+        assertEquals(RoundPhase.SHOWDOWN, s.round!!.phase)
+        assertEquals(Pot(3, listOf("p1", "p2", "p3")), pots[0], "Meena can win 1 from each player")
+        assertEquals(Pot(6, listOf("p1", "p2")), pots[1])
+        s = s.act(DeclareWinners(listOf("p3"))).act(DeclareWinners(listOf("p1")))
+        assertEquals(listOf(102, 96, 3), s.players.map { it.balance })
+        assertChipsConserved(s)
+    }
+
+    @Test
+    fun potLimitCountsTheAntes() {
+        val s = table(settings = potLimit.copy(ante = 1)).act(StartRound)
+        // Pot 6 (antes and blinds), Asha owes 2: pot raise is to 2 + 6 + 2 = 10.
+        assertEquals(10, PokerRules.options(s, "p1").maxRaiseTo)
+    }
+
+    @Test
+    fun anteSettings() {
+        assertEquals("Blinds ₹1/₹2 · ante ₹1 · no limit", noLimit.copy(ante = 1).summary())
+        assertEquals(
+            "Blinds ₹1/₹2 · big blind ante ₹2 each · pot limit",
+            potLimit.copy(ante = 2, anteStyle = AnteStyle.BIG_BLIND).summary(),
+        )
+        assertEquals("Ante can't be negative", noLimit.copy(ante = -1).validationError())
+        assertEquals("Ante can't be more than the starting chips", noLimit.copy(ante = 500).validationError())
+        assertNull(TableSettings(ante = 5).anteText(), "3 Patti tables have no ante")
+    }
+
+    @Test
     fun settingsValidation() {
         assertNull(noLimit.validationError())
         assertEquals("Big blind can't be smaller than the small blind", noLimit.copy(bigBlind = 0).validationError())
@@ -255,7 +321,8 @@ class PokerEngineTest {
 
     @Test
     fun randomLegalPlayNeverCreatesOrLosesChips() {
-        for (settings in listOf(noLimit, potLimit)) {
+        val withAntes = listOf(noLimit.copy(ante = 1), potLimit.copy(ante = 2, anteStyle = AnteStyle.BIG_BLIND))
+        for (settings in listOf(noLimit, potLimit) + withAntes) {
             for (seed in 1..4) playRandomly(settings, seed)
         }
     }

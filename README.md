@@ -31,7 +31,8 @@ one and keeps your data.
 1. **Connect the phones.** Everyone joins the same WiFi, or the host turns on their phone's hotspot and
    the others connect to it.
 2. **Host a table.** The host enters their name, taps **Host a table**, picks **3 Patti** or **Poker**,
-   sets the starting chips (250 by default) and the boot or blinds, then taps **Open table**. The game
+   sets the starting chips (250 by default) and the boot or blinds (plus an optional ante), then taps
+   **Open table**. The game
    is fixed for that table; open a new table to play the other one.
 3. **Join.** Everyone else enters their name and taps **Join a table**. The table shows up by itself.
    If it doesn't, type the address the host sees under **⋮ → Invite players**. iPhones scan the QR
@@ -70,6 +71,7 @@ Works for Texas Hold'em, Omaha and other flop games; the host picks **No limit**
 | Rule | What the app does |
 | --- | --- |
 | Blinds | The two seats after the dealer post the small and big blind. Heads-up the dealer posts the small blind. The dealer button moves one seat every hand. |
+| Antes | Optional. **Everyone** puts in the ante each hand, or the **big blind** pays it for the whole table. Antes go in before the blinds, count towards the pot and side pots, but not towards the bet to call. |
 | Betting rounds | Pre-flop, flop, turn and river. Pre-flop the player after the big blind acts first and the big blind gets the option; after that the first player after the dealer starts. |
 | Check / Call / Bet / Raise | A raise must be at least as big as the last bet or raise. |
 | No limit | Bet any amount up to all your chips. |

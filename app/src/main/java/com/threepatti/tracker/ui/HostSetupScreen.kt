@@ -3,6 +3,7 @@ package com.threepatti.tracker.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.threepatti.core.AnteStyle
 import com.threepatti.core.BetLimit
 import com.threepatti.core.GameType
 import com.threepatti.core.TableSettings
@@ -49,6 +51,8 @@ data class SettingsInput(
     val smallBlind: String,
     val bigBlind: String,
     val betLimit: BetLimit,
+    val ante: String,
+    val anteStyle: AnteStyle,
     val currency: String,
 ) {
     fun toSettings(): TableSettings? {
@@ -60,6 +64,8 @@ data class SettingsInput(
                 smallBlind = smallBlind.toIntOrNull() ?: return null,
                 bigBlind = bigBlind.toIntOrNull() ?: return null,
                 betLimit = betLimit,
+                ante = ante.ifBlank { "0" }.toIntOrNull() ?: return null,
+                anteStyle = anteStyle,
             )
         } else {
             common.copy(
@@ -89,6 +95,8 @@ data class SettingsInput(
             smallBlind = settings.smallBlind.toString(),
             bigBlind = settings.bigBlind.toString(),
             betLimit = settings.betLimit,
+            ante = settings.ante.toString(),
+            anteStyle = settings.anteStyle,
             currency = settings.currency,
         )
     }
@@ -123,6 +131,31 @@ fun SettingsFields(input: SettingsInput, onChange: (SettingsInput) -> Unit, modi
                     Modifier.weight(1f), supportingText = "Second seat after dealer",
                 )
             }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NumberField(
+                    "Ante", input.ante, { onChange(input.copy(ante = it)) },
+                    Modifier.weight(1f), supportingText = "Per player, 0 = none",
+                )
+                NumberField(
+                    "Starting chips", input.startingBalance, { onChange(input.copy(startingBalance = it)) },
+                    Modifier.weight(1f), supportingText = "Each player gets",
+                )
+            }
+            if ((input.ante.toIntOrNull() ?: 0) > 0) {
+                Text("Who pays the ante", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+                Choice(
+                    listOf(AnteStyle.EVERYONE to "Everyone", AnteStyle.BIG_BLIND to "Big blind"),
+                    input.anteStyle,
+                ) { onChange(input.copy(anteStyle = it)) }
+                Hint(
+                    if (input.anteStyle == AnteStyle.EVERYONE) {
+                        "Every player puts in the ante each hand."
+                    } else {
+                        "The big blind pays the ante for the whole table, so there's only one to collect."
+                    },
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
             Text("Betting limit", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
             Choice(
                 listOf(BetLimit.NO_LIMIT to "No limit", BetLimit.POT_LIMIT to "Pot limit"),
@@ -137,11 +170,8 @@ fun SettingsFields(input: SettingsInput, onChange: (SettingsInput) -> Unit, modi
                 modifier = Modifier.padding(bottom = 8.dp),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                NumberField(
-                    "Starting chips", input.startingBalance, { onChange(input.copy(startingBalance = it)) },
-                    Modifier.weight(1f), supportingText = "Each player gets",
-                )
                 CurrencyField(input, onChange, Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -276,6 +306,15 @@ fun RulesText(settings: TableSettings) {
         listOf(
             "The two players after the dealer post the blinds, ${m(settings.smallBlind)} and ${m(settings.bigBlind)}. " +
                 "The dealer button moves one seat every hand.",
+            *listOfNotNull(
+                when {
+                    settings.ante <= 0 -> null
+                    settings.anteStyle == AnteStyle.BIG_BLIND ->
+                        "The big blind also pays an ante of ${m(settings.ante)} for every player. Antes go into the pot " +
+                            "but don't count as a bet."
+                    else -> "Everyone antes ${m(settings.ante)} before the blinds. Antes go into the pot but don't count as a bet."
+                },
+            ).toTypedArray(),
             "Betting goes round four times: before the flop, after the flop, on the turn and on the river.",
             "Check, call, bet or raise. A raise must be at least as big as the last bet or raise.",
             if (settings.betLimit == BetLimit.POT_LIMIT) {

@@ -10,6 +10,10 @@ enum class GameType { TEEN_PATTI, POKER }
 @Serializable
 enum class BetLimit { NO_LIMIT, POT_LIMIT }
 
+/** Who puts in the poker ante: every player, or the big blind for the whole table. */
+@Serializable
+enum class AnteStyle { EVERYONE, BIG_BLIND }
+
 /** Poker betting rounds. The cards themselves are dealt for real at the table. */
 @Serializable
 enum class Street { PREFLOP, FLOP, TURN, RIVER }
@@ -30,6 +34,9 @@ data class TableSettings(
     val smallBlind: Int = 1,
     val bigBlind: Int = 2,
     val betLimit: BetLimit = BetLimit.NO_LIMIT,
+    /** Ante per player each hand, on top of the blinds. 0 means no ante. */
+    val ante: Int = 0,
+    val anteStyle: AnteStyle = AnteStyle.EVERYONE,
     val currency: String = "₹",
 ) {
     val isPoker: Boolean get() = game == GameType.POKER
@@ -41,6 +48,8 @@ data class TableSettings(
             smallBlind <= 0 -> "Small blind must be more than 0"
             bigBlind < smallBlind -> "Big blind can't be smaller than the small blind"
             bigBlind > startingBalance -> "Big blind can't be more than the starting chips"
+            ante < 0 -> "Ante can't be negative"
+            ante > startingBalance -> "Ante can't be more than the starting chips"
             else -> null
         }
         bootAmount <= 0 -> "Boot amount must be more than 0"
