@@ -44,6 +44,6 @@ jobs:
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest 3patti-chips-handler.apk \
             --title "3 Patti Chips Handler (latest build)" \
-            --notes "Build ${GITHUB_RUN_NUMBER} from commit ${GITHUB_SHA::7}. Download 3patti-chips-handler.apk on every phone and install it. Made by Afler." \
+            --notes "Build ${GITHUB_RUN_NUMBER} from commit ${GITHUB_SHA::7}. Download 3patti-chips-handler.apk on every phone and install it." \
             --target "$GITHUB_SHA" \
             --latest
