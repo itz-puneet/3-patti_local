@@ -14,6 +14,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,12 +29,19 @@ import androidx.compose.ui.unit.sp
 import com.threepatti.core.GameState
 import com.threepatti.core.Player
 import com.threepatti.core.RoundPhase
+import com.threepatti.core.describeRound
 import com.threepatti.core.formatMoney
 import com.threepatti.core.formatSignedMoney
 import com.threepatti.core.summary
 
 @Composable
-fun TableTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPlayerClick: (String) -> Unit) {
+fun TableTab(
+    state: GameState,
+    myId: String,
+    canOpen: (String) -> Boolean,
+    onPlayerClick: (String) -> Unit,
+    onInvite: (() -> Unit)?,
+) {
     LazyColumn(
         contentPadding = PaddingValues(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -48,14 +57,27 @@ fun TableTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPla
                 onClick = { onPlayerClick(player.id) },
             )
         }
-        if (state.players.size < 2) {
-            item(key = "alone") {
-                Hint(
-                    "Waiting for players. Others open the app on the same WiFi and tap Join a table. " +
-                        "You can also add someone without a phone from the menu.",
-                    center = true,
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                )
+        if (onInvite != null && state.round == null) {
+            item(key = "invite") {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Invite players", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Players with the app tap Join a table. iPhones scan a QR code and play in the browser.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Button(
+                            onClick = onInvite,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary,
+                                contentColor = MaterialTheme.colorScheme.onSecondary,
+                            ),
+                        ) { Text("Show QR code and address") }
+                    }
+                }
             }
         }
     }

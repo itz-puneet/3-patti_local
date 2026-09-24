@@ -1,5 +1,8 @@
 package com.threepatti.core
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class Transfer(val fromId: String, val toId: String, val amount: Int)
 
 object Settlement {

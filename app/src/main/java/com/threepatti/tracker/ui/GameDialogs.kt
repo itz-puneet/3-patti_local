@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,6 +37,7 @@ import com.threepatti.core.HandStatus
 import com.threepatti.core.RoundPhase
 import com.threepatti.core.TableSettings
 import com.threepatti.core.formatSignedMoney
+import com.threepatti.core.namesOf
 import com.threepatti.core.summary
 
 @Composable
@@ -53,7 +55,7 @@ fun GameDialogs(
         onDismiss()
     }
     when (dialog) {
-        GameDialog.Address -> AddressDialog(session.addresses(), onDismiss)
+        GameDialog.Invite -> InviteDialog(session.addresses(), session.webLinks(), onDismiss)
         GameDialog.AddPlayer -> TextInputDialog(
             title = "Add a player without a phone",
             label = "Name",
@@ -352,24 +354,40 @@ private fun SettingsDialog(settings: TableSettings, onSave: (TableSettings) -> U
 }
 
 @Composable
-private fun AddressDialog(addresses: List<String>, onDismiss: () -> Unit) {
+private fun InviteDialog(appAddresses: List<String>, webLinks: List<String>, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Table address") },
+        title = { Text("Invite players") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    "Players open the app, tap Join a table and pick this table. " +
-                        "If it doesn't show up, they can type this address:",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                if (addresses.isEmpty()) {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (appAddresses.isEmpty()) {
                     Text(
                         "No WiFi address found. Connect to WiFi or turn on your hotspot.",
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                addresses.forEach { address ->
+                Hint("Everyone must be on the same WiFi, or connected to this phone's hotspot.")
+                val link = webLinks.firstOrNull()
+                if (link != null) {
+                    Text("iPhone or phone without the app", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("Scan this with the camera, or open the link in the browser:", style = MaterialTheme.typography.bodyMedium)
+                    QrImage(link, Modifier.fillMaxWidth(0.85f).align(Alignment.CenterHorizontally))
+                    Text(
+                        link,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                    webLinks.drop(1).forEach { Hint("Also: $it") }
+                    HorizontalDivider()
+                }
+                Text("Phones with the app", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Open the app, tap Join a table and pick this table. If it doesn't show up, type:",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                appAddresses.forEach { address ->
                     Text(
                         address,
                         style = MaterialTheme.typography.headlineSmall,
@@ -377,7 +395,6 @@ private fun AddressDialog(addresses: List<String>, onDismiss: () -> Unit) {
                         fontWeight = FontWeight.Bold,
                     )
                 }
-                Hint("Everyone must be on the same WiFi, or connected to this phone's hotspot.")
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },

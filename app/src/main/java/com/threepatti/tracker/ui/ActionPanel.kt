@@ -42,6 +42,7 @@ import com.threepatti.core.Round
 import com.threepatti.core.RoundPhase
 import com.threepatti.core.Rules
 import com.threepatti.core.SeatOptions
+import com.threepatti.core.winnerText
 
 /**
  * The buttons at the bottom of the game screen. Players act for their own seat. The host also acts for

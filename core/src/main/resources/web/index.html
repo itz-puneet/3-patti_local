@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14532D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="3 Patti">
+<title>3 Patti Tracker</title>
+<link rel="icon" href="data:,">
+<style>
+:root {
+  --primary: #1B6B45; --on-primary: #fff; --primary-c: #B7F0CF; --on-primary-c: #002112;
+  --secondary: #8A5A00; --on-secondary: #fff; --secondary-c: #FFDDB0; --on-secondary-c: #2C1700;
+  --tertiary-c: #BFE9F8; --on-tertiary-c: #001F27;
+  --bg: #F5FBF5; --text: #171D19; --muted: #404943; --outline: #C0C9C1;
+  --card: #EFF5EF; --card-2: #E4EAE4; --panel: #E9EFE9; --variant: #DCE5DC;
+  --error: #BA1A1A; --error-c: #FFDAD6; --on-error-c: #410002;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary: #8BD8AE; --on-primary: #003920; --primary-c: #005231; --on-primary-c: #A6F4C9;
+    --secondary: #FFB950; --on-secondary: #482A00; --secondary-c: #673F00; --on-secondary-c: #FFDDB0;
+    --tertiary-c: #214C58; --on-tertiary-c: #BFE9F8;
+    --bg: #0F1511; --text: #DEE4DE; --muted: #C0C9C1; --outline: #404943;
+    --card: #171D19; --card-2: #252B27; --panel: #1B211D; --variant: #404943;
+    --error: #FFB4AB; --error-c: #93000A; --on-error-c: #FFDAD6;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh; display: flex; flex-direction: column;
+}
+button { font: inherit; cursor: pointer; border: 0; -webkit-tap-highlight-color: transparent; }
+button:disabled { opacity: .4; cursor: default; }
+input { font: inherit; font-size: 16px; }
+.wrap { width: 100%; max-width: 560px; margin: 0 auto; }
+#app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+#app > .wrap:first-child { flex: 1; display: flex; flex-direction: column; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.center { text-align: center; }
+.bold { font-weight: 700; }
+
+/* Join screen */
+.join { padding: 40px 24px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.fan { position: relative; width: 150px; height: 104px; margin-bottom: 8px; }
+.pc { position: absolute; left: 47px; top: 12px; width: 56px; height: 80px; background: #fff; border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25); transform-origin: 50% 100%; padding: 4px 6px; color: #1B1B1B; font-weight: 700; }
+.pc span { position: absolute; left: 0; right: 0; top: 26px; text-align: center; font-size: 26px; font-weight: 400; }
+.pc.red { color: #C62828; }
+h1 { margin: 0; font-size: 26px; }
+.field { width: 100%; border: 1px solid var(--outline); background: transparent; color: var(--text);
+  border-radius: 8px; padding: 14px; }
+.field:focus { outline: 2px solid var(--primary); border-color: transparent; }
+.btn { background: var(--primary); color: var(--on-primary); border-radius: 26px; padding: 14px 18px; font-weight: 600; width: 100%; }
+.btn.alt { background: var(--secondary); color: var(--on-secondary); }
+.btn.line { background: transparent; color: var(--primary); border: 1px solid var(--outline); }
+.btn.danger { background: transparent; color: var(--error); border: 1px solid var(--outline); }
+.btn.big { min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2; }
+.btn.big b { font-size: 18px; }
+.btn.slim { padding: 11px 6px; }
+.row { display: flex; gap: 8px; }
+.row > * { flex: 1; min-width: 0; }
+
+/* Game */
+header { padding: 12px 16px 8px; padding-top: max(12px, env(safe-area-inset-top)); }
+header .title { font-size: 20px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.banner { background: var(--error-c); color: var(--on-error-c); padding: 8px 16px; font-size: 14px; }
+.tabs { display: flex; border-bottom: 1px solid var(--outline); }
+.tabs button { flex: 1; background: transparent; color: var(--muted); padding: 12px 0; font-weight: 600; border-bottom: 3px solid transparent; }
+.tabs button.on { color: var(--primary); border-bottom-color: var(--primary); }
+main { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.card { background: var(--card); border-radius: 12px; padding: 12px; }
+.pot { background: var(--primary-c); color: var(--on-primary-c); text-align: center; padding: 16px; }
+.pot .label { font-size: 12px; letter-spacing: 1.5px; font-weight: 600; }
+.pot .amount { font-size: 44px; font-weight: 700; line-height: 1.1; }
+.pot .what { font-size: 17px; font-weight: 600; margin-top: 6px; }
+.player { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+.player.turn { background: color-mix(in srgb, var(--secondary-c) 55%, transparent); box-shadow: inset 0 0 0 2px var(--secondary); }
+.player.mine { cursor: pointer; }
+.avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--variant); color: var(--muted);
+  display: flex; align-items: center; justify-content: center; font-weight: 700; flex: none; }
+.turn .avatar { background: var(--primary); color: var(--on-primary); }
+.pinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.pname { display: flex; gap: 6px; align-items: center; font-weight: 600; }
+.pname .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { border-radius: 99px; padding: 1px 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill.pri { background: var(--primary); color: var(--on-primary); }
+.pill.sec { background: var(--secondary-c); color: var(--on-secondary-c); }
+.pill.ter { background: var(--tertiary-c); color: var(--on-tertiary-c); }
+.pill.muted { background: var(--variant); color: var(--muted); }
+.pill.err { background: var(--error-c); color: var(--on-error-c); }
+.pill.dealer { background: var(--secondary); color: var(--on-secondary); }
+.money { text-align: right; flex: none; }
+.money .bal { font-weight: 700; font-size: 17px; }
+.pos { color: var(--primary); } .neg { color: var(--error); }
+.offline { color: var(--error); font-size: 12px; font-weight: 600; }
+
+/* Action panel */
+.panel { position: sticky; bottom: 0; background: var(--panel); box-shadow: 0 -2px 10px rgba(0,0,0,.15);
+  padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
+.panel .head { font-weight: 600; }
+.winner { color: var(--primary); font-weight: 700; font-size: 17px; text-align: center; }
+
+/* Ledger */
+table { width: 100%; border-collapse: collapse; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; text-align: right; padding: 6px 4px; }
+td { padding: 9px 4px; text-align: right; border-top: 1px solid var(--outline); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; white-space: normal; }
+tfoot td { font-weight: 600; }
+.transfer { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.transfer .to { flex: 1; }
+h2 { font-size: 17px; margin: 8px 0 0; }
+.log { font-size: 13px; color: var(--muted); padding: 2px 0; }
+
+/* Dialog and toast */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 10; }
+.dialog { background: var(--bg); border-radius: 24px; padding: 22px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; }
+.dialog h3 { margin: 0; font-size: 20px; font-weight: 500; }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dialog .actions button { background: transparent; color: var(--primary); font-weight: 600; padding: 10px 12px; }
+.dialog .actions button.danger { color: var(--error); }
+.dialog .menu button { display: block; width: 100%; text-align: left; background: transparent; color: var(--primary); padding: 12px 4px; font-weight: 600; }
+.toast { position: fixed; left: 16px; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom)); margin: 0 auto; max-width: 520px;
+  background: #2C322E; color: #ECF2EC; padding: 14px 16px; border-radius: 8px; z-index: 20; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+.spinner { width: 36px; height: 36px; border: 4px solid var(--variant); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="overlay"></div>
+<script>
+"use strict";
+(function () {
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
+  };
+  var deviceId = store.get("device");
+  if (!deviceId) {
+    deviceId = "web-" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    store.set("device", deviceId);
+  }
+
+  var app = document.getElementById("app");
+  var overlay = document.getElementById("overlay");
+  var name = store.get("name") || "";
+  var status = "join";          // join, connecting, live, reconnecting, closed
+  var closedMessage = "";
+  var data = null;              // latest WebUpdate from the host
+  var tab = "table";
+  var busy = false;
+  var es = null;
+  var toastTimer = null;
+  var dialog = null;            // { kind, ... }
+
+  // Helpers
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function cur() { return data ? data.state.settings.currency : "₹"; }
+  function money(n) { return (n < 0 ? "-" : "") + cur() + Math.abs(n); }
+  function signed(n) { return n > 0 ? "+" + cur() + n : n < 0 ? "-" + cur() + (-n) : cur() + "0"; }
+  function netClass(n) { return n > 0 ? "pos" : n < 0 ? "neg" : "muted"; }
+  function player(s, id) { for (var i = 0; i < s.players.length; i++) if (s.players[i].id === id) return s.players[i]; return null; }
+  function nameOf(s, id) { var p = player(s, id); return p ? p.name : "Former player"; }
+  function hostName(s) { for (var i = 0; i < s.players.length; i++) if (s.players[i].isHost) return s.players[i].name; return "the host"; }
+  function handOf(r, id) { if (!r) return null; for (var i = 0; i < r.hands.length; i++) if (r.hands[i].playerId === id) return r.hands[i]; return null; }
+  function isActive(r) { return r && r.phase !== "FINISHED"; }
+  function btn(label, act, cls, extra, disabled) {
+    return '<button class="btn ' + (cls || "") + '" data-act="' + act + '"' + (extra || "") +
+      (disabled || busy ? " disabled" : "") + ">" + label + "</button>";
+  }
+
+  // Talking to the host
+
+  function connect() {
+    if (es) { es.close(); es = null; }
+    status = data ? "reconnecting" : "connecting";
+    render();
+    es = new EventSource("/events?device=" + encodeURIComponent(deviceId) + "&name=" + encodeURIComponent(name));
+    es.addEventListener("update", function (ev) {
+      data = JSON.parse(ev.data);
+      status = "live";
+      store.set("joined", "1");
+      render();
+    });
+    es.addEventListener("goodbye", function (ev) {
+      var message = "Disconnected";
+      try { message = JSON.parse(ev.data).message; } catch (e) {}
+      if (es) { es.close(); es = null; }
+      status = "closed";
+      closedMessage = message;
+      store.del("joined");
+      render();
+    });
+    es.onerror = function () {
+      if (status === "closed") return;
+      if (status === "live") { status = "reconnecting"; render(); }
+      var source = es;
+      if (source && source.readyState === 2) {
+        setTimeout(function () { if (es === source && status !== "closed") connect(); }, 2000);
+      }
+    };
+  }
+
+  function send(action) {
+    if (!data || busy) return;
+    busy = true;
+    render();
+    fetch("/action?device=" + encodeURIComponent(deviceId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(action)
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (!res.ok) showToast(res.error || "That move is not allowed");
+    }).catch(function () {
+      showToast("Couldn't reach the host");
+    }).then(function () { busy = false; render(); });
+  }
+
+  function heartbeat() {
+    if (status === "live" || status === "reconnecting") {
+      fetch("/ping?device=" + encodeURIComponent(deviceId), { method: "POST" }).catch(function () {});
+    }
+  }
+  setInterval(heartbeat, 10000);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible") return;
+    heartbeat();
+    if ((status === "live" || status === "reconnecting") && (!es || es.readyState === 2)) connect();
+  });
+
+  function showToast(text) {
+    var old = document.querySelector(".toast");
+    if (old) old.remove();
+    var t = document.createElement("div");
+    t.className = "toast";
+    t.textContent = text;
+    document.body.appendChild(t);
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.remove(); }, 3500);
+  }
+
+  // Screens
+
+  function render() {
+    if (status === "join") return renderJoin();
+    if (status === "closed") return renderClosed();
+    if (!data) return renderConnecting();
+    renderGame();
+  }
+
+  function logo() {
+    return '<div class="fan">' +
+      '<div class="pc" style="transform: translateX(-26px) rotate(-16deg)">K<span>♣</span></div>' +
+      '<div class="pc red" style="transform: translateY(-4px)">Q<span>♦</span></div>' +
+      '<div class="pc" style="transform: translateX(26px) rotate(16deg)">A<span>♠</span></div></div>';
+  }
+
+  function renderJoin() {
+    document.title = "3 Patti Tracker";
+    app.innerHTML = '<div class="wrap join">' + logo() +
+      "<h1>3 Patti Tracker</h1>" +
+      '<div class="muted center">Join the table on this WiFi. The host keeps the pot and the ledger.</div>' +
+      '<input id="name" class="field" maxlength="20" autocomplete="nickname" autocapitalize="words" placeholder="Your name" value="' + esc(name) + '">' +
+      '<div id="nameError" class="small neg" style="display:none">Enter your name first</div>' +
+      btn("Join the table", "join") +
+      '<div class="small muted center">You need to be on the same WiFi as the host, or on the host\'s hotspot.</div></div>';
+    var input = document.getElementById("name");
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") join(); });
+  }
+
+  function join() {
+    var input = document.getElementById("name");
+    var value = input ? input.value.trim() : name;
+    if (!value) { document.getElementById("nameError").style.display = "block"; return; }
+    name = value.slice(0, 20);
+    store.set("name", name);
+    connect();
+  }
+
+  function renderConnecting() {
+    app.innerHTML = '<div class="wrap join"><div class="spinner"></div><div class="bold">Joining the table…</div>' +
+      '<div class="small muted center">If this takes long, check that you are on the host\'s WiFi or hotspot and that the table is open.</div>' +
+      btn("Cancel", "leave", "line") + "</div>";
+  }
+
+  function renderClosed() {
+    document.title = "3 Patti Tracker";
+    app.innerHTML = '<div class="wrap join">' + logo() + '<div class="bold center">' + esc(closedMessage) + "</div>" +
+      btn("Join again", "rejoin") + "</div>";
+  }
+
+  function renderGame() {
+    var u = data, s = u.state, r = s.round;
+    var myTurn = r && ((r.phase === "BETTING" && r.turnId === u.playerId) ||
+      (r.phase === "SIDE_SHOW_REQUESTED" && r.sideShow && r.sideShow.targetId === u.playerId));
+    document.title = myTurn ? "Your turn · 3 Patti" : "3 Patti Tracker";
+    var html = '<div class="wrap"><header><div class="title">' + esc(s.tableName) + '</div><div class="small muted">Hosted by ' +
+      esc(hostName(s)) + "</div></header>";
+    if (status === "reconnecting") html += '<div class="banner">Lost the host. Reconnecting…</div>';
+    html += '<div class="tabs">' + ["table", "ledger", "history"].map(function (t) {
+      return '<button data-act="tab" data-tab="' + t + '" class="' + (tab === t ? "on" : "") + '">' +
+        t.charAt(0).toUpperCase() + t.slice(1) + "</button>";
+    }).join("") + "</div><main>";
+    if (tab === "table") html += tableTab(u);
+    else if (tab === "ledger") html += ledgerTab(u);
+    else html += historyTab(u);
+    html += "</main></div>";
+    html += '<div class="panel"><div class="wrap" style="display:flex;flex-direction:column;gap:8px">' + actions(u) + "</div></div>";
+    app.innerHTML = html;
+  }
+
+  function status0(s, p) {
+    var r = s.round, h = handOf(r, p.id);
+    if (isActive(r) && h) return { BLIND: ["Blind", "sec"], SEEN: ["Seen", "ter"], PACKED: ["Packed", "muted"] }[h.status];
+    if (r && !isActive(r) && r.winnerIds.indexOf(p.id) >= 0) return ["Won", "pri"];
+    if (r && !isActive(r) && h) return [h.status === "PACKED" ? "Packed" : "Lost", "muted"];
+    if (p.sittingOut) return ["Sitting out", "muted"];
+    if (isActive(r)) return ["Next round", "muted"];
+    if (p.balance < s.settings.bootAmount) return ["Needs chips", "err"];
+    return ["Ready", "muted"];
+  }
+
+  function tableTab(u) {
+    var s = u.state, r = s.round, html = '<div class="card pot">';
+    if (!r) {
+      html += '<div class="what">No round running</div><div>Everyone starts with ' + money(s.settings.startingBalance) +
+        '</div><div class="small">' + esc(u.rulesSummary) + "</div>";
+    } else {
+      html += '<div class="label">' + (isActive(r) ? "ROUND " + r.number + " · POT" : "ROUND " + r.number + " FINISHED") + "</div>" +
+        '<div class="amount">' + money(r.pot) + "</div>";
+      if (isActive(r)) html += "<div>Blind <b>" + money(r.stake) + "</b> &nbsp; Chaal <b>" + money(r.stake * 2) + "</b></div>";
+      html += '<div class="what">' + esc(u.roundText) + '</div><div class="small">Dealer: ' + esc(nameOf(s, r.dealerId)) + "</div>";
+    }
+    html += "</div>";
+    s.players.forEach(function (p) {
+      var h = handOf(r, p.id), mine = p.id === u.playerId;
+      var turn = isActive(r) && ((r.phase === "BETTING" && r.turnId === p.id) ||
+        (r.phase === "SIDE_SHOW_REQUESTED" && r.sideShow && r.sideShow.targetId === p.id));
+      var st = status0(s, p), net = p.balance - p.buyIn;
+      html += '<div class="card player' + (turn ? " turn" : "") + (mine ? " mine" : "") + '"' + (mine ? ' data-act="me"' : "") + ">" +
+        '<div class="avatar">' + esc(p.name.charAt(0).toUpperCase()) + "</div>" +
+        '<div class="pinfo"><div class="pname"><span class="n">' + esc(p.name) + (mine ? " (you)" : "") + "</span>" +
+        (isActive(r) && r.dealerId === p.id ? '<span class="pill dealer">Dealer</span>' : "") +
+        (p.isHost ? '<span class="pill muted">Host</span>' : "") + "</div>" +
+        '<div><span class="pill ' + st[1] + '">' + st[0] + "</span>" +
+        (isActive(r) && h ? ' <span class="small muted">in pot ' + money(h.invested) + "</span>" : "") + "</div>" +
+        (!p.hasDevice ? '<div class="small muted">No phone · host plays for them</div>' :
+          !p.isHost && !p.connected ? '<div class="offline">Offline</div>' : "") +
+        '</div><div class="money"><div class="bal">' + money(p.balance) + '</div><div class="small ' + netClass(net) + '">' +
+        signed(net) + "</div></div></div>";
+    });
+    return html;
+  }
+
+  function ledgerTab(u) {
+    var s = u.state, r = s.round;
+    var html = '<div class="card"><table><thead><tr><th>Player</th><th>Bought</th><th>Chips</th><th>Net</th></tr></thead><tbody>';
+    var bought = 0, chips = 0;
+    s.players.forEach(function (p) {
+      var net = p.balance - p.buyIn;
+      bought += p.buyIn; chips += p.balance;
+      html += "<tr><td>" + esc(p.name) + (p.id === u.playerId ? " (you)" : "") + '</td><td class="muted">' + money(p.buyIn) +
+        "</td><td>" + money(p.balance) + '</td><td class="bold ' + netClass(net) + '">' + signed(net) + "</td></tr>";
+    });
+    html += "</tbody><tfoot><tr><td>Total</td><td>" + money(bought) + "</td><td>" + money(chips) + "</td><td></td></tr></tfoot></table></div>";
+    if (isActive(r)) html += '<div class="small muted">' + money(r.pot) + " is in the pot of the running round. Settle up after it ends.</div>";
+    html += "<h2>Settle up</h2>";
+    if (!u.transfers.length) html += '<div class="muted">Everyone is even. Nobody owes anything.</div>';
+    u.transfers.forEach(function (t) {
+      html += '<div class="card transfer"><span>' + esc(nameOf(s, t.fromId)) + '</span><span class="muted">→</span><span class="to">' +
+        esc(nameOf(s, t.toId)) + '</span><span class="bold">' + money(t.amount) + "</span></div>";
+    });
+    html += '<div class="small muted">Bought = starting chips plus top ups, minus cash outs. Net = chips now minus bought.</div>';
+    return html;
+  }
+
+  function historyTab(u) {
+    var s = u.state, html = "<h2>Rounds</h2>";
+    if (!s.results.length) html += '<div class="muted">No rounds finished yet.</div>';
+    s.results.slice().reverse().forEach(function (res) {
+      var changes = Object.keys(res.changes).map(function (id) { return [id, res.changes[id]]; })
+        .sort(function (a, b) { return b[1] - a[1]; })
+        .map(function (c) { return esc(nameOf(s, c[0])) + ' <b class="' + netClass(c[1]) + '">' + signed(c[1]) + "</b>"; }).join(" &nbsp; ");
+      html += '<div class="card"><div class="row"><b>Round ' + res.number + '</b><span style="text-align:right">Pot ' + money(res.pot) +
+        '</span></div><div class="pos bold">' + (res.winnerNames.length === 1 ? "Winner: " : "Split between: ") +
+        esc(res.winnerNames.join(", ")) + '</div><div class="small">' + changes + "</div></div>";
+    });
+    html += "<h2>Table log</h2>";
+    s.log.slice().reverse().forEach(function (e) { html += '<div class="log">' + esc(e.text) + "</div>"; });
+    return html;
+  }
+
+  function actions(u) {
+    var s = u.state, r = s.round, o = u.options, me = u.playerId;
+    if (!r || r.phase === "FINISHED") {
+      return (r ? '<div class="winner">' + esc(u.roundText) + "</div>" : "") +
+        '<div class="center" style="padding:6px 0">Waiting for ' + esc(hostName(s)) + " to start the " + (r ? "next " : "") + "round</div>";
+    }
+    var me0 = player(s, me);
+    var summary = o.inRound && me0 ? money(me0.balance) + " left · " + (o.isPacked ? "packed" : o.isBlind ? "blind" : "seen") : "";
+    if (r.phase === "BETTING") {
+      var html = '<div><div class="head">' + (o.isTurn ? "Your turn" : "Waiting for " + esc(nameOf(s, r.turnId))) +
+        '</div><div class="small muted">' + summary + "</div></div>";
+      if (!o.inRound) return html + '<div class="small muted">You are not in this round. You\'ll be dealt in next round.</div>';
+      if (o.isPacked) return html + '<div class="small muted">You packed. Wait for the next round.</div>';
+      if (o.isTurn) {
+        html += '<div class="row">' +
+          btn(o.callLabel + "<b>" + money(o.callAmount) + "</b>", "bet", "big", "", o.callError != null) +
+          btn("Raise<b>" + money(o.raiseAmount) + "</b>", "raise", "big alt", "", o.raiseError != null) + "</div>";
+        html += '<div class="row">' +
+          (o.canSee ? btn("See cards", "see", "line slim") : "") +
+          (o.showAvailable ? btn("Show " + money(o.showAmount), "show", "line slim", "", o.showError != null) : "") +
+          (o.sideShowAvailable ? btn("Side show", "sideshow", "line slim", "", o.sideShowError != null) : "") +
+          btn("Pack", "pack", "danger slim") + "</div>";
+        var note = o.callError || (o.raiseError && o.raiseError.indexOf("needs") < 0 ? o.raiseError : null) ||
+          (o.sideShowAvailable ? (o.sideShowError || "Side show: pay " + money(o.sideShowAmount) +
+            " and compare cards with " + nameOf(s, o.sideShowTargetId)) : null);
+        if (note) html += '<div class="small muted">' + esc(note) + "</div>";
+        return html;
+      }
+      return html + '<div class="row">' + (o.canSee ? btn("See cards", "see", "line slim") : "") + btn("Pack", "pack", "danger slim") + "</div>";
+    }
+    var ss = r.sideShow;
+    if (r.phase === "SIDE_SHOW_REQUESTED" && ss) {
+      if (o.answerSideShowFrom) {
+        return '<div class="head">' + esc(nameOf(s, ss.requesterId)) + " asks you for a side show</div>" +
+          '<div class="small muted">If you accept, you both compare cards privately and the weaker hand packs. The host enters the result.</div>' +
+          '<div class="row">' + btn("Refuse", "refuse", "line") + btn("Accept", "accept") + "</div>";
+      }
+      return '<div class="head">Waiting for ' + esc(nameOf(s, ss.targetId)) + " to answer " + esc(nameOf(s, ss.requesterId)) + "'s side show</div>";
+    }
+    if (r.phase === "SIDE_SHOW_COMPARE" && ss) {
+      return '<div class="head">' + esc(nameOf(s, ss.requesterId)) + " and " + esc(nameOf(s, ss.targetId)) + " are comparing cards</div>" +
+        '<div class="small muted">Waiting for the host to enter who won the side show</div>';
+    }
+    return '<div class="head">Show: ' + esc(r.showdownIds.map(function (id) { return nameOf(s, id); }).join(" vs ")) + "</div>" +
+      '<div class="small muted">Cards are on the table. Waiting for the host to enter the winner.</div>';
+  }
+
+  // Dialogs
+
+  function openDialog(d) { dialog = d; renderDialog(); }
+  function closeDialog() { dialog = null; overlay.innerHTML = ""; }
+  function renderDialog() {
+    if (!dialog) { overlay.innerHTML = ""; return; }
+    var body = "";
+    if (dialog.kind === "confirm") {
+      body = "<h3>" + esc(dialog.title) + "</h3><div>" + esc(dialog.text) + '</div><div class="actions">' +
+        '<button data-act="close">Cancel</button><button data-act="confirm" class="' + (dialog.danger ? "danger" : "") + '">' +
+        esc(dialog.label) + "</button></div>";
+    } else if (dialog.kind === "me") {
+      var p = data && player(data.state, data.playerId);
+      if (!p) return closeDialog();
+      body = "<h3>" + esc(p.name) + " (you)</h3>" +
+        '<div class="small muted">Chips ' + money(p.balance) + " · bought " + money(p.buyIn) + " · " + signed(p.balance - p.buyIn) + "</div>" +
+        '<div class="menu"><button data-act="rename">Rename</button><button data-act="sitout">' +
+        (p.sittingOut ? "Sit back in" : "Sit out from next round") + '</button><button data-act="rules">Table rules</button></div>' +
+        '<div class="actions"><button data-act="close">Close</button></div>';
+    } else if (dialog.kind === "rename") {
+      body = '<h3>Rename</h3><input id="newName" class="field" maxlength="20" value="' + esc(name) + '">' +
+        '<div class="actions"><button data-act="close">Cancel</button><button data-act="saveName">Save</button></div>';
+    } else if (dialog.kind === "rules") {
+      var set = data.state.settings;
+      body = "<h3>Table rules</h3><div class=\"bold\">" + esc(data.rulesSummary) + '</div><div class="small muted">' +
+        "• Every round starts with a boot of " + money(set.bootAmount) + " from each player. The stake starts at the boot.<br>" +
+        "• Blind players bet the stake. Seen players bet twice the stake (chaal).<br>" +
+        "• Raise doubles the stake for everyone after you.<br>" +
+        "• Side show: a seen player can ask the previous seen player to compare cards privately. The weaker hand packs.<br>" +
+        "• Show: when 2 players are left, either can pay one bet to show. The host enters who won.</div>" +
+        '<div class="actions"><button data-act="close">OK</button></div>';
+    }
+    overlay.innerHTML = '<div class="scrim" data-act="scrim"><div class="dialog">' + body + "</div></div>";
+    var input = document.getElementById("newName");
+    if (input) input.focus();
+  }
+
+  // Taps
+
+  document.addEventListener("click", function (e) {
+    var el = e.target.closest ? e.target.closest("[data-act]") : null;
+    if (!el || el.disabled) return;
+    var act = el.getAttribute("data-act");
+    var me = data ? data.playerId : null;
+    var o = data ? data.options : null;
+    switch (act) {
+      case "join": join(); break;
+      case "leave": if (es) { es.close(); es = null; } status = "join"; data = null; store.del("joined"); render(); break;
+      case "rejoin": data = null; connect(); break;
+      case "tab": tab = el.getAttribute("data-tab"); render(); window.scrollTo(0, 0); break;
+      case "bet": send({ type: "bet", playerId: me, raise: false }); break;
+      case "raise": send({ type: "bet", playerId: me, raise: true }); break;
+      case "see": send({ type: "see", playerId: me }); break;
+      case "show": send({ type: "show", playerId: me }); break;
+      case "sideshow": send({ type: "side_show", playerId: me }); break;
+      case "accept": send({ type: "side_show_answer", playerId: me, accept: true }); break;
+      case "refuse": send({ type: "side_show_answer", playerId: me, accept: false }); break;
+      case "pack":
+        var h = handOf(data.state.round, me);
+        openDialog({ kind: "confirm", title: "Pack your hand?", text: "The " + money(h ? h.invested : 0) + " already in the pot stays there.",
+          label: "Pack", danger: true, action: { type: "pack", playerId: me } });
+        break;
+      case "me": openDialog({ kind: "me" }); break;
+      case "rename": openDialog({ kind: "rename" }); break;
+      case "rules": openDialog({ kind: "rules" }); break;
+      case "saveName":
+        var v = document.getElementById("newName").value.trim();
+        if (v) { name = v.slice(0, 20); store.set("name", name); send({ type: "rename", playerId: me, name: name }); }
+        closeDialog();
+        break;
+      case "sitout":
+        var p = player(data.state, me);
+        send({ type: "sit_out", playerId: me, sittingOut: !(p && p.sittingOut) });
+        closeDialog();
+        break;
+      case "confirm": var a = dialog && dialog.action; closeDialog(); if (a) send(a); break;
+      case "close": closeDialog(); break;
+      case "scrim": if (e.target === el) closeDialog(); break;
+    }
+  });
+
+  if (name && store.get("joined")) connect(); else render();
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,9 @@
 package com.threepatti.core
 
+import kotlinx.serialization.Serializable
+
 /** What one seat can do right now. Used by the UI to decide which buttons to show and enable. */
+@Serializable
 data class SeatOptions(
     val playerId: String,
     val inRound: Boolean,

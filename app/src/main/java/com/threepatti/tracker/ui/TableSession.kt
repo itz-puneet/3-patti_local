@@ -25,6 +25,9 @@ interface TableSession {
     /** Addresses players can type to reach this table (host only). */
     fun addresses(): List<String>
 
+    /** Links that open the table in a browser, for phones without the app such as iPhones (host only). */
+    fun webLinks(): List<String>
+
     fun submit(action: GameAction)
 
     fun undo()

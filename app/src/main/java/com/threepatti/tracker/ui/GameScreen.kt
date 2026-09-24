@@ -48,7 +48,7 @@ import kotlinx.coroutines.launch
 
 /** Dialogs the game screen can show. Only one is open at a time. */
 sealed interface GameDialog {
-    data object Address : GameDialog
+    data object Invite : GameDialog
     data object AddPlayer : GameDialog
     data object Settings : GameDialog
     data object Rules : GameDialog
@@ -142,7 +142,17 @@ private fun GameContent(
                 }
             }
             when (tab) {
-                0 -> TableTab(state, myId, canOpen = { session.isHost || it == myId }, onPlayerClick = openPlayer)
+                0 -> TableTab(
+                    state = state,
+                    myId = myId,
+                    canOpen = { session.isHost || it == myId },
+                    onPlayerClick = openPlayer,
+                    onInvite = if (session.isHost) {
+                        { dialog = GameDialog.Invite }
+                    } else {
+                        null
+                    },
+                )
                 1 -> LedgerTab(state, myId, canOpen = { session.isHost || it == myId }, onPlayerClick = openPlayer)
                 else -> HistoryTab(state)
             }
@@ -213,7 +223,7 @@ private fun GameTopBar(
                 }
                 val betting = round != null && round.isActive && round.phase != RoundPhase.SHOWDOWN
                 if (isHost) {
-                    item("Table address", true, GameDialog.Address)
+                    item("Invite players", true, GameDialog.Invite)
                     item("Add player without phone", true, GameDialog.AddPlayer)
                     item("Table settings", !state.isRoundActive, GameDialog.Settings)
                     item("Call show for everyone", betting, GameDialog.ForceShow)

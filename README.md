@@ -1,8 +1,9 @@
 # 3 Patti Tracker
 
 An Android app for keeping track of chips while you play 3 Patti (Teen Patti) with **real cards**.
-One phone hosts the table and everyone else joins from their own phone over the local WiFi or the
-host's hotspot. No internet or account needed.
+One Android phone hosts the table and everyone else joins from their own phone over the local WiFi
+or the host's hotspot. Friends with an iPhone join from Safari by scanning a QR code. No internet or
+account needed.
 
 The app does the chip work: it collects the boot, knows what blind and seen players have to pay,
 tracks the pot, handles show and side show, pays out the winner and keeps a ledger of who is up or
@@ -14,6 +15,10 @@ down, so at the end it tells you exactly who pays whom.
 2. Open the file and allow installing from this source when Android asks.
 3. Install the same version on every phone. The host turns away phones with a different version.
 
+**iPhone (or any phone without the app):** nothing to install. The host opens
+**Invite players** and the iPhone scans the QR code with the camera, which opens the table in Safari.
+The host must be an Android phone.
+
 A new APK is built automatically for every change pushed to `main`. It installs over the previous
 one and keeps your data.
 
@@ -24,7 +29,8 @@ one and keeps your data.
 2. **Host a table.** The host enters their name, taps **Host a table**, sets the starting chips
    (250 by default), boot, and optional limits, then taps **Open table**.
 3. **Join.** Everyone else enters their name and taps **Join a table**. The table shows up by itself.
-   If it doesn't, type the address the host sees under **⋮ → Table address**.
+   If it doesn't, type the address the host sees under **⋮ → Invite players**. iPhones scan the QR
+   code on that same screen, enter their name in Safari and tap **Join the table**.
 4. **Play.** Deal real cards and the host taps **Start round**. Each player then acts on their own
    phone when it's their turn: **See cards**, **Blind/Chaal**, **Raise**, **Pack**, **Show** or
    **Side show**.
@@ -67,7 +73,10 @@ Dealer and first turn move one seat each round. Players who can't pay the boot, 
 
 - **Table doesn't show up in Join**: make sure all phones are on the same WiFi or on the host's hotspot.
   Some routers (and guest networks) block phones from seeing each other. Using the host's hotspot avoids
-  that. You can also type the address from **⋮ → Table address**.
+  that. You can also type the address from **⋮ → Invite players**.
+- **iPhone shows "Offline" on the host**: Safari pauses pages when the iPhone locks or switches apps. While
+  it's offline the host gets that player's buttons, so the game never waits. Opening Safari again
+  reconnects to the same seat.
 - **Players get disconnected when the host locks the screen**: the app keeps running in the background
   with a notification. If your phone's battery saver still stops it, allow the app to run in the
   background in the phone's battery settings.
@@ -92,10 +101,12 @@ the repository can sign an update, so don't reuse this key for anything else.
 
 ```
 core/   Plain Kotlin: game rules, table state, ledger, and the LAN protocol (host server,
-        client, discovery). Fully covered by unit tests, including real socket tests.
+        client, discovery, and the web server for browsers). Covered by unit tests,
+        including real socket and HTTP tests. The browser page is core/src/main/resources/web/.
 app/    Android app: Jetpack Compose screens, the host's background service, and saving the table.
 ```
 
 The host phone is the only source of truth. Players' phones send moves to the host over TCP
 (port 47474) and receive the full table after every change. Tables are found with a UDP broadcast
-on port 47475.
+on port 47475. Browsers load a page from the host on port 8080, get table updates as Server-Sent
+Events and send moves as small POST requests.

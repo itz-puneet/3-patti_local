@@ -71,6 +71,13 @@ class TableHost(
         }
     }
 
+    /** The seat of the phone with [deviceId], or null if it hasn't joined or was removed. */
+    fun playerIdFor(deviceId: String): String? {
+        synchronized(lock) {
+            return devices[deviceId]?.takeIf { _state.value.player(it) != null }
+        }
+    }
+
     fun setConnected(playerId: String, connected: Boolean) {
         synchronized(lock) {
             val current = _state.value

@@ -1,11 +1,13 @@
 package com.threepatti.tracker.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,8 +22,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -33,8 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.threepatti.core.GameState
 import com.threepatti.core.HandStatus
 import com.threepatti.core.Player
-import com.threepatti.core.Round
-import com.threepatti.core.RoundPhase
+import com.threepatti.core.QrCode
 
 /** Three fanned playing cards, used as the app's logo. */
 @Composable
@@ -73,6 +77,28 @@ private fun PlayingCard(rank: String, suit: String, modifier: Modifier = Modifie
                 Text(suit, color = ink, fontSize = 12.sp, lineHeight = 12.sp)
             }
             Text(suit, color = ink, fontSize = 26.sp, modifier = Modifier.align(Alignment.Center))
+        }
+    }
+}
+
+/** A QR code, always black on white so phone cameras can read it in dark mode too. */
+@Composable
+fun QrImage(text: String, modifier: Modifier = Modifier) {
+    val qr = remember(text) { QrCode.encode(text) }
+    Canvas(modifier.aspectRatio(1f).background(Color.White, RoundedCornerShape(8.dp))) {
+        // Keep a quiet zone of 4 modules around the code, as scanners expect.
+        val cell = size.minDimension / (qr.size + 8)
+        val start = cell * 4
+        for (y in 0 until qr.size) {
+            for (x in 0 until qr.size) {
+                if (qr[x, y]) {
+                    drawRect(
+                        Color.Black,
+                        topLeft = Offset(start + x * cell, start + y * cell),
+                        size = Size(cell + 0.5f, cell + 0.5f),
+                    )
+                }
+            }
         }
     }
 }
@@ -194,35 +220,6 @@ fun NumberedSteps(steps: List<String>, modifier: Modifier = Modifier) {
         }
     }
 }
-
-// Text helpers shared by the screens.
-
-fun GameState.namesOf(ids: List<String>): String = when (ids.size) {
-    0 -> "nobody"
-    1 -> nameOf(ids[0])
-    else -> ids.dropLast(1).joinToString { nameOf(it) } + " and " + nameOf(ids.last())
-}
-
-/** One line saying what the table is waiting for. */
-fun describeRound(state: GameState, round: Round): String {
-    val sideShow = round.sideShow
-    return when (round.phase) {
-        RoundPhase.BETTING -> "${state.nameOf(round.turnId)}'s turn"
-        RoundPhase.SIDE_SHOW_REQUESTED ->
-            "${state.nameOf(sideShow?.requesterId)} asked ${state.nameOf(sideShow?.targetId)} for a side show"
-        RoundPhase.SIDE_SHOW_COMPARE ->
-            "${state.nameOf(sideShow?.requesterId)} and ${state.nameOf(sideShow?.targetId)} are comparing cards"
-        RoundPhase.SHOWDOWN -> "Show: " + round.showdownIds.joinToString(" vs ") { state.nameOf(it) }
-        RoundPhase.FINISHED -> winnerText(state, round)
-    }
-}
-
-fun winnerText(state: GameState, round: Round): String =
-    if (round.winnerIds.size == 1) {
-        "${state.nameOf(round.winnerIds[0])} won ${state.money(round.pot)}"
-    } else {
-        "${state.namesOf(round.winnerIds)} split ${state.money(round.pot)}"
-    }
 
 enum class PillTone { Primary, Secondary, Tertiary, Muted, Error }
 

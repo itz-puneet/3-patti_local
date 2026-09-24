@@ -13,6 +13,7 @@ import com.threepatti.core.net.ConnectionStatus
 import com.threepatti.core.net.GameClient
 import com.threepatti.core.net.HostServer
 import com.threepatti.core.net.NetUtils
+import com.threepatti.core.net.WebServer
 import com.threepatti.core.net.Wire
 import com.threepatti.tracker.ui.SavedTableInfo
 import com.threepatti.tracker.ui.TableSession
@@ -99,6 +100,7 @@ class HostTableSession(
 ) : ActiveSession {
     private val table = TableHost(snapshot, onSnapshot = store::save)
     private val server = HostServer(table, scope)
+    private val web = WebServer(table, scope)
     private var multicastLock: WifiManager.MulticastLock? = null
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
@@ -112,6 +114,11 @@ class HostTableSession(
 
     fun start() {
         server.start()
+        try {
+            web.start()
+        } catch (e: IOException) {
+            // Phones with the app can still join; only the browser link is missing.
+        }
         store.save(table.snapshot())
         // Some phones drop broadcast packets unless an app holds this lock, which would hide the table from Join.
         val wifi = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager
@@ -126,6 +133,11 @@ class HostTableSession(
         .map { if (server.port == Wire.DEFAULT_PORT) it.ip else "${it.ip}:${server.port}" }
         .distinct()
 
+    override fun webLinks(): List<String> {
+        if (web.port <= 0) return emptyList()
+        return NetUtils.localAddresses().map { "http://${it.ip}:${web.port}" }.distinct()
+    }
+
     override fun submit(action: GameAction) {
         table.perform(action)?.let { _messages.tryEmit(it) }
     }
@@ -136,6 +148,7 @@ class HostTableSession(
 
     override fun close() {
         server.stop()
+        web.stop()
         runCatching { multicastLock?.release() }
         multicastLock = null
         HostService.stop(context)
@@ -162,6 +175,8 @@ class ClientTableSession(
     fun start() = client.start()
 
     override fun addresses(): List<String> = emptyList()
+
+    override fun webLinks(): List<String> = emptyList()
 
     override fun submit(action: GameAction) {
         client.send(action)
