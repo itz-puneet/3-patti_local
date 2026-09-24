@@ -17,7 +17,8 @@ down, so at the end it tells you exactly who pays whom.
 
 **iPhone (or any phone without the app):** nothing to install. The host opens
 **Invite players** and the iPhone scans the QR code with the camera, which opens the table in Safari.
-The host must be an Android phone.
+The host must be an Android phone. If the host already added that player without a phone, they join
+with the same name and take over that seat, chips and all. Browser players show "In browser".
 
 A new APK is built automatically for every change pushed to `main`. It installs over the previous
 one and keeps your data.

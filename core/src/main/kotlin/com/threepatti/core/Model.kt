@@ -39,6 +39,8 @@ data class Player(
     val isHost: Boolean = false,
     /** False for players added by the host who don't have their own phone. */
     val hasDevice: Boolean = true,
+    /** True when the player plays from a web browser (such as an iPhone) instead of the app. */
+    val onBrowser: Boolean = false,
     val connected: Boolean = false,
     val sittingOut: Boolean = false,
 ) {

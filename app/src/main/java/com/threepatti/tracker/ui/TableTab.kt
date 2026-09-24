@@ -198,10 +198,11 @@ private fun PlayerRowContent(state: GameState, player: Player, isMe: Boolean, hi
             when {
                 !player.hasDevice -> Hint("No phone · host plays for them")
                 !player.isHost && !player.connected -> Text(
-                    "Offline",
+                    if (player.onBrowser) "Offline · in browser" else "Offline",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.error,
                 )
+                player.onBrowser -> Hint("In browser")
             }
         }
         Column(horizontalAlignment = Alignment.End) {

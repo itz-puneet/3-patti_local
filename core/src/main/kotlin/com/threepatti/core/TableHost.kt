@@ -59,12 +59,24 @@ class TableHost(
         }
     }
 
-    /** Seats the phone with [deviceId], or gives it back its old seat. Returns the player id. */
-    fun join(deviceId: String, name: String): String {
+    /**
+     * Seats the phone or browser with [deviceId] and returns its player id. A returning device gets its old
+     * seat back. A new device whose name matches a player the host added without a phone takes over that seat.
+     */
+    fun join(deviceId: String, name: String, onBrowser: Boolean = false): String {
         synchronized(lock) {
             val current = _state.value
-            devices[deviceId]?.takeIf { current.player(it) != null }?.let { return it }
-            val (next, id) = GameEngine.addPlayer(current, name, hasDevice = true)
+            devices[deviceId]?.takeIf { current.player(it) != null }?.let { id ->
+                val updated = GameEngine.setOnBrowser(current, id, onBrowser)
+                if (updated !== current) publish(updated)
+                return id
+            }
+            val claimed = GameEngine.claimableSeat(current, name)
+            val (next, id) = if (claimed != null) {
+                GameEngine.claimSeat(current, claimed, onBrowser) to claimed
+            } else {
+                GameEngine.addPlayer(current, name, hasDevice = true, onBrowser = onBrowser)
+            }
             devices = devices + (deviceId to id)
             publish(next)
             return id

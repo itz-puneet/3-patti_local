@@ -380,6 +380,10 @@ private fun InviteDialog(appAddresses: List<String>, webLinks: List<String>, onD
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                     )
                     webLinks.drop(1).forEach { Hint("Also: $it") }
+                    Hint(
+                        "Added someone without a phone earlier? If they join with the same name, " +
+                            "they take over that seat and its chips.",
+                    )
                     HorizontalDivider()
                 }
                 Text("Phones with the app", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)

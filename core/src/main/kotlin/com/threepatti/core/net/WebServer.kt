@@ -151,7 +151,7 @@ class WebServer(
         )
         out.flush()
 
-        val playerId = table.join(deviceId, request.query["name"].orEmpty())
+        val playerId = table.join(deviceId, request.query["name"].orEmpty(), onBrowser = true)
         val stream = EventStream(socket, out, currentCoroutineContext().job)
         streams.put(playerId, stream)?.close()
         table.setConnected(playerId, true)

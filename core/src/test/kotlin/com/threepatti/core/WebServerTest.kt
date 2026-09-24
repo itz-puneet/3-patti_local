@@ -112,6 +112,7 @@ class WebServerTest {
             val first = priya.nextUpdate()
             val me = first.playerId
             assertEquals("Priya Shah", first.state.player(me)!!.name)
+            assertTrue(first.state.player(me)!!.onBrowser)
             withTimeout(5_000) { table.state.first { it.player(me)?.connected == true } }
 
             assertEquals(WebResult(false, "No round is running"), priya.act(Bet(me)))

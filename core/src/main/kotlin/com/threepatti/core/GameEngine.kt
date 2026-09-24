@@ -45,9 +45,33 @@ object GameEngine {
     }
 
     /** Seats a new player and returns the new state together with the player's id. */
-    fun addPlayer(state: GameState, name: String, hasDevice: Boolean): Pair<GameState, String> {
-        val (next, id) = seatPlayer(state, name, hasDevice)
+    fun addPlayer(state: GameState, name: String, hasDevice: Boolean, onBrowser: Boolean = false): Pair<GameState, String> {
+        val (next, id) = seatPlayer(state, name, hasDevice, onBrowser)
         return next.bumped() to id
+    }
+
+    /**
+     * The seat of a player the host added without a phone whose name matches [name], if any.
+     * Joining with that name lets the player take over the seat from their own phone.
+     */
+    fun claimableSeat(state: GameState, name: String): String? {
+        val clean = cleanName(name) ?: return null
+        return state.players.firstOrNull { !it.hasDevice && it.name.equals(clean, ignoreCase = true) }?.id
+    }
+
+    /** Hands a seat to the phone or browser that just joined, keeping its chips and history. */
+    fun claimSeat(state: GameState, playerId: String, onBrowser: Boolean): GameState {
+        val player = state.player(playerId) ?: return state
+        return state.updatePlayer(playerId) { it.copy(hasDevice = true, onBrowser = onBrowser) }
+            .withLog("${player.name} now plays from their own ${if (onBrowser) "browser" else "phone"}")
+            .bumped()
+    }
+
+    /** Records whether a returning player uses a browser or the app. */
+    fun setOnBrowser(state: GameState, playerId: String, onBrowser: Boolean): GameState {
+        val player = state.player(playerId) ?: return state
+        if (player.onBrowser == onBrowser) return state
+        return state.updatePlayer(playerId) { it.copy(onBrowser = onBrowser) }.bumped()
     }
 
     fun setConnected(state: GameState, playerId: String, connected: Boolean): GameState {
@@ -62,7 +86,15 @@ object GameEngine {
      */
     fun restoreForUndo(previous: GameState, current: GameState, undoneText: String?): GameState {
         val currentById = current.players.associateBy { it.id }
-        val restored = previous.players.map { it.copy(connected = currentById[it.id]?.connected ?: false) }
+        // Which phone owns a seat is not part of the game, so undo keeps it as it is now.
+        val restored = previous.players.map { player ->
+            val now = currentById[player.id]
+            player.copy(
+                connected = now?.connected ?: false,
+                hasDevice = now?.hasDevice ?: player.hasDevice,
+                onBrowser = now?.onBrowser ?: player.onBrowser,
+            )
+        }
         val knownIds = previous.players.map { it.id }.toSet()
         val start = previous.settings.startingBalance
         val joinedSince = current.players
@@ -333,12 +365,25 @@ object GameEngine {
 
     // Table management.
 
-    private fun seatPlayer(state: GameState, requestedName: String, hasDevice: Boolean): Pair<GameState, String> {
+    private fun seatPlayer(
+        state: GameState,
+        requestedName: String,
+        hasDevice: Boolean,
+        onBrowser: Boolean = false,
+    ): Pair<GameState, String> {
         val number = state.nextPlayerNumber
         val id = "p$number"
         val name = uniqueName(state, cleanName(requestedName) ?: "Player $number", exceptId = null)
         val start = state.settings.startingBalance
-        val player = Player(id = id, name = name, balance = start, buyIn = start, hasDevice = hasDevice, connected = false)
+        val player = Player(
+            id = id,
+            name = name,
+            balance = start,
+            buyIn = start,
+            hasDevice = hasDevice,
+            onBrowser = onBrowser,
+            connected = false,
+        )
         val next = state.copy(players = state.players + player, nextPlayerNumber = number + 1)
             .withLog(if (hasDevice) "$name joined the table" else "$name was seated by the host")
         return next to id

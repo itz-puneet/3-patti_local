@@ -53,6 +53,39 @@ class TableHostTest {
     }
 
     @Test
+    fun joiningWithSameNameTakesOverSeatAddedWithoutPhone() {
+        val host = host()
+        assertNull(host.perform(AddPlayer("Dadi")))
+        val dadi = host.state.value.players.last().id
+        assertNull(host.perform(GameAction.AdjustChips(dadi, 50)))
+
+        assertEquals(dadi, host.join("web-dadi", "  dadi ", onBrowser = true))
+        val seat = host.state.value.player(dadi)!!
+        assertTrue(seat.hasDevice)
+        assertTrue(seat.onBrowser)
+        assertEquals(300, seat.balance)
+        assertEquals("Dadi", seat.name)
+        assertEquals(2, host.state.value.players.size)
+        assertEquals("Dadi now plays from their own browser", host.state.value.log.last().text)
+        assertEquals(dadi, host.playerIdFor("web-dadi"))
+
+        // Undo is about the game, so the seat stays with the browser.
+        assertNull(host.undo())
+        assertEquals(250, host.state.value.player(dadi)!!.balance)
+        assertTrue(host.state.value.player(dadi)!!.hasDevice)
+    }
+
+    @Test
+    fun seatsOfPlayersWithPhonesAreNeverTakenOver() {
+        val host = host()
+        val ravi = host.join("device-ravi", "Ravi")
+        val other = host.join("device-other", "Ravi")
+        assertNotEquals(ravi, other)
+        assertEquals("Ravi 2", host.state.value.player(other)!!.name)
+        assertFalse(host.state.value.player(other)!!.onBrowser)
+    }
+
+    @Test
     fun undoRemovesPlayersAddedByHost() {
         val host = host()
         assertNull(host.perform(AddPlayer("Dadi")))

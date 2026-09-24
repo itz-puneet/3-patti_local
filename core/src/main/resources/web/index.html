@@ -275,7 +275,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       '<input id="name" class="field" maxlength="20" autocomplete="nickname" autocapitalize="words" placeholder="Your name" value="' + esc(name) + '">' +
       '<div id="nameError" class="small neg" style="display:none">Enter your name first</div>' +
       btn("Join the table", "join") +
-      '<div class="small muted center">You need to be on the same WiFi as the host, or on the host\'s hotspot.</div></div>';
+      '<div class="small muted center">You need to be on the same WiFi as the host, or on the host\'s hotspot.</div>' +
+      '<div class="small muted center">If the host already added you without a phone, use that same name to take over your seat.</div></div>';
     var input = document.getElementById("name");
     input.addEventListener("keydown", function (e) { if (e.key === "Enter") join(); });
   }
@@ -298,7 +299,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   function renderClosed() {
     document.title = "3 Patti Tracker";
     app.innerHTML = '<div class="wrap join">' + logo() + '<div class="bold center">' + esc(closedMessage) + "</div>" +
-      btn("Join again", "rejoin") + "</div>";
+      btn("Join again", "leave") + "</div>";
   }
 
   function renderGame() {
@@ -357,7 +358,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         '<div><span class="pill ' + st[1] + '">' + st[0] + "</span>" +
         (isActive(r) && h ? ' <span class="small muted">in pot ' + money(h.invested) + "</span>" : "") + "</div>" +
         (!p.hasDevice ? '<div class="small muted">No phone · host plays for them</div>' :
-          !p.isHost && !p.connected ? '<div class="offline">Offline</div>' : "") +
+          !p.isHost && !p.connected ? '<div class="offline">Offline' + (p.onBrowser ? " · in browser" : "") + "</div>" :
+          p.onBrowser ? '<div class="small muted">In browser</div>' : "") +
         '</div><div class="money"><div class="bal">' + money(p.balance) + '</div><div class="small ' + netClass(net) + '">' +
         signed(net) + "</div></div></div>";
     });
@@ -497,7 +499,6 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     switch (act) {
       case "join": join(); break;
       case "leave": if (es) { es.close(); es = null; } status = "join"; data = null; store.del("joined"); render(); break;
-      case "rejoin": data = null; connect(); break;
       case "tab": tab = el.getAttribute("data-tab"); render(); window.scrollTo(0, 0); break;
       case "bet": send({ type: "bet", playerId: me, raise: false }); break;
       case "raise": send({ type: "bet", playerId: me, raise: true }); break;
