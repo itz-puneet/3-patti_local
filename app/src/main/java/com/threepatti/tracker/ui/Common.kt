@@ -187,6 +187,18 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+/** The maker's signature, shown on the home screen and in the table rules. */
+@Composable
+fun Signature(modifier: Modifier = Modifier) {
+    Text(
+        "Made by Afler",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.outline,
+        letterSpacing = 0.5.sp,
+        modifier = modifier,
+    )
+}
+
 @Composable
 fun Hint(text: String, modifier: Modifier = Modifier, center: Boolean = false) {
     Text(

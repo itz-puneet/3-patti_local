@@ -165,6 +165,8 @@ fun HomeScreen(
                     )
                 }
             }
+            Spacer(Modifier.height(24.dp))
+            Signature()
         }
     }
 

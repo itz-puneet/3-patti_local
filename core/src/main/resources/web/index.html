@@ -43,6 +43,7 @@ input { font: inherit; font-size: 16px; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .center { text-align: center; }
+.sig { font-size: 12px; color: var(--muted); letter-spacing: .04em; opacity: .8; margin-top: 12px; }
 .bold { font-weight: 700; }
 
 /* Join screen */
@@ -287,7 +288,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       '<div id="nameError" class="small neg" style="display:none">Enter your name first</div>' +
       btn("Join the table", "join") +
       '<div class="small muted center">You need to be on the same WiFi as the host, or on the host\'s hotspot.</div>' +
-      '<div class="small muted center">If the host already added you without a phone, use that same name to take over your seat.</div></div>';
+      '<div class="small muted center">If the host already added you without a phone, use that same name to take over your seat.</div>' +
+      '<div class="sig center">Made by Afler</div></div>';
     var input = document.getElementById("name");
     input.addEventListener("keydown", function (e) { if (e.key === "Enter") join(); });
   }
@@ -587,7 +589,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         "• Raise doubles the stake for everyone after you.<br>" +
         "• Side show: a seen player can ask the previous seen player to compare cards privately. The weaker hand packs.<br>" +
         "• Show: when 2 players are left, either can pay one bet to show. The host enters who won.</div>") +
-        '<div class="actions"><button data-act="close">OK</button></div>';
+        '<div class="sig">Made by Afler</div><div class="actions"><button data-act="close">OK</button></div>';
     }
     overlay.innerHTML = '<div class="scrim" data-act="scrim"><div class="dialog">' + body + "</div></div>";
     var input = document.getElementById("newName");

@@ -76,6 +76,7 @@ fun GameDialogs(
                 Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(state.settings.summary(), fontWeight = FontWeight.SemiBold)
                     RulesText(state.settings)
+                    Signature(Modifier.padding(top = 8.dp))
                 }
             },
             confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },

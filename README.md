@@ -1,5 +1,7 @@
 # 3 Patti Chips Handler
 
+*Made by Afler*
+
 An Android app for keeping track of chips while you play **3 Patti (Teen Patti) or poker** with **real cards**.
 One Android phone hosts the table and everyone else joins from their own phone over the local WiFi
 or the host's hotspot. Friends with an iPhone join from Safari by scanning a QR code. No internet or
