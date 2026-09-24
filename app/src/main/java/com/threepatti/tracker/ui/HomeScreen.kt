@@ -78,7 +78,7 @@ fun HomeScreen(
                 textAlign = TextAlign.Center,
             )
             Hint(
-                "Keeps track of chips, bets and the pot while you play with real cards",
+                "Keeps track of chips, bets and the pot while you play 3 Patti or poker with real cards",
                 center = true,
                 modifier = Modifier.padding(top = 4.dp),
             )
@@ -159,7 +159,8 @@ fun HomeScreen(
                         listOf(
                             "Everyone joins the same WiFi, or the host turns on their phone's hotspot and the others connect to it.",
                             "One person hosts a table. Everyone else taps Join a table and picks it.",
-                            "Deal real cards. The app handles boot, blind, chaal, raise, show and side show, and keeps the ledger.",
+                            "Deal real cards. The app handles the betting for 3 Patti (boot, chaal, show, side show) " +
+                                "or poker (blinds, raises, all-ins, side pots) and keeps the ledger.",
                         ),
                     )
                 }

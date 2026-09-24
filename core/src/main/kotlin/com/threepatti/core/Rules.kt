@@ -167,8 +167,17 @@ object Rules {
     }
 }
 
+fun TableSettings.gameName(): String = when {
+    !isPoker -> "3 Patti"
+    betLimit == BetLimit.POT_LIMIT -> "pot-limit poker"
+    else -> "no-limit poker"
+}
+
 fun TableSettings.summary(): String {
     fun m(amount: Int) = formatMoney(amount, currency)
+    if (isPoker) {
+        return "Blinds ${m(smallBlind)}/${m(bigBlind)} · ${if (betLimit == BetLimit.POT_LIMIT) "pot limit" else "no limit"}"
+    }
     return listOfNotNull(
         "Boot ${m(bootAmount)}",
         if (maxSeenBet > 0) "chaal limit ${m(maxSeenBet)}" else "no chaal limit",

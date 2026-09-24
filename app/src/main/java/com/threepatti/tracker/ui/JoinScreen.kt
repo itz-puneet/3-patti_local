@@ -114,7 +114,8 @@ fun JoinScreen(
                         Column(Modifier.weight(1f)) {
                             Text(table.tableName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "Host: ${table.hostName} · ${table.players} ${if (table.players == 1) "player" else "players"}",
+                                "${table.game.replaceFirstChar { it.uppercase() }} · Host: ${table.hostName} · " +
+                                    "${table.players} ${if (table.players == 1) "player" else "players"}",
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             Hint(if (table.compatible) table.address else "Different app version. Install the same version as the host.")

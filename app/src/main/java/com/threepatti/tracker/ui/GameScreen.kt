@@ -226,8 +226,8 @@ private fun GameTopBar(
                     item("Invite players", true, GameDialog.Invite)
                     item("Add player without phone", true, GameDialog.AddPlayer)
                     item("Table settings", !state.isRoundActive, GameDialog.Settings)
-                    item("Call show for everyone", betting, GameDialog.ForceShow)
-                    item("Cancel round (misdeal)", state.isRoundActive, GameDialog.CancelRound)
+                    item(if (state.settings.isPoker) "Go to showdown" else "Call show for everyone", betting, GameDialog.ForceShow)
+                    item("Cancel ${state.roundWord} (misdeal)", state.isRoundActive, GameDialog.CancelRound)
                     item("Close table", true, GameDialog.CloseTable)
                 } else {
                     item("Table rules", true, GameDialog.Rules)

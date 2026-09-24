@@ -2,6 +2,7 @@ package com.threepatti.core.net
 
 import com.threepatti.core.Actor
 import com.threepatti.core.TableHost
+import com.threepatti.core.gameName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -182,7 +183,14 @@ class HostServer(
             val state = table.state.value
             val reply = Wire.json.encodeToString(
                 TableAnnouncement.serializer(),
-                TableAnnouncement(Wire.PROTOCOL_VERSION, state.tableName, state.hostName, port, state.players.size),
+                TableAnnouncement(
+                    Wire.PROTOCOL_VERSION,
+                    state.tableName,
+                    state.hostName,
+                    port,
+                    state.players.size,
+                    state.settings.gameName(),
+                ),
             ).toByteArray(Charsets.UTF_8)
             runCatching { socket.send(DatagramPacket(reply, reply.size, packet.socketAddress)) }
         }

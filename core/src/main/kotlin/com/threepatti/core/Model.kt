@@ -2,9 +2,23 @@ package com.threepatti.core
 
 import kotlinx.serialization.Serializable
 
+/** Which game a table plays. Chosen when the table is opened and fixed after that. */
+@Serializable
+enum class GameType { TEEN_PATTI, POKER }
+
+/** How much a poker player may bet: anything up to all their chips, or at most the size of the pot. */
+@Serializable
+enum class BetLimit { NO_LIMIT, POT_LIMIT }
+
+/** Poker betting rounds. The cards themselves are dealt for real at the table. */
+@Serializable
+enum class Street { PREFLOP, FLOP, TURN, RIVER }
+
 @Serializable
 data class TableSettings(
+    val game: GameType = GameType.TEEN_PATTI,
     val startingBalance: Int = 250,
+    // 3 Patti.
     val bootAmount: Int = 5,
     /** Highest amount a seen player may bet in one turn (the chaal limit). 0 means no limit. */
     val maxSeenBet: Int = 80,
@@ -12,10 +26,23 @@ data class TableSettings(
     val potLimit: Int = 0,
     /** How many blind bets a player may make before they have to see their cards. 0 means no limit. */
     val maxBlindTurns: Int = 0,
+    // Poker.
+    val smallBlind: Int = 1,
+    val bigBlind: Int = 2,
+    val betLimit: BetLimit = BetLimit.NO_LIMIT,
     val currency: String = "₹",
 ) {
+    val isPoker: Boolean get() = game == GameType.POKER
+
     fun validationError(): String? = when {
         startingBalance <= 0 -> "Starting chips must be more than 0"
+        currency.length > 4 -> "Currency symbol is too long"
+        isPoker -> when {
+            smallBlind <= 0 -> "Small blind must be more than 0"
+            bigBlind < smallBlind -> "Big blind can't be smaller than the small blind"
+            bigBlind > startingBalance -> "Big blind can't be more than the starting chips"
+            else -> null
+        }
         bootAmount <= 0 -> "Boot amount must be more than 0"
         bootAmount > startingBalance -> "Boot can't be more than the starting chips"
         maxSeenBet < 0 -> "Chaal limit can't be negative"
@@ -23,7 +50,6 @@ data class TableSettings(
         potLimit < 0 -> "Pot limit can't be negative"
         potLimit in 1..bootAmount * 2 -> "Pot limit must be more than ${bootAmount * 2}"
         maxBlindTurns < 0 -> "Blind limit can't be negative"
-        currency.length > 4 -> "Currency symbol is too long"
         else -> null
     }
 }
@@ -48,17 +74,30 @@ data class Player(
     val net: Int get() = balance - buyIn
 }
 
+/** BLIND and SEEN are 3 Patti. A poker hand is ACTIVE until it folds. PACKED is a pack or fold in both games. */
 @Serializable
-enum class HandStatus { BLIND, SEEN, PACKED }
+enum class HandStatus { BLIND, SEEN, PACKED, ACTIVE }
 
 @Serializable
 data class Hand(
     val playerId: String,
     val status: HandStatus = HandStatus.BLIND,
-    /** Chips this player has put into the current pot, including the boot. */
+    /** Chips this player has put into the current pot, including the boot or blinds. */
     val invested: Int = 0,
     val blindTurns: Int = 0,
+    // Poker.
+    /** Chips put in during the current betting round. */
+    val streetBet: Int = 0,
+    val allIn: Boolean = false,
+    /** Has acted since the last full raise, so the betting round can end once everyone has matched. */
+    val acted: Boolean = false,
+    /** Faced only a short all-in raise after acting: may call or fold but not raise again. */
+    val raiseClosed: Boolean = false,
 )
+
+/** A poker pot and the players who can win it. The main pot comes first, then side pots. */
+@Serializable
+data class Pot(val amount: Int, val eligibleIds: List<String>)
 
 @Serializable
 enum class RoundPhase {
@@ -96,6 +135,18 @@ data class Round(
     val sideShow: SideShow? = null,
     val showdownIds: List<String> = emptyList(),
     val winnerIds: List<String> = emptyList(),
+    // Poker.
+    val street: Street = Street.PREFLOP,
+    /** Highest bet in the current betting round that others must match. */
+    val currentBet: Int = 0,
+    /** Smallest raise increment allowed right now. */
+    val minRaise: Int = 0,
+    val smallBlindId: String? = null,
+    val bigBlindId: String? = null,
+    /** Pots at showdown, main pot first. */
+    val pots: List<Pot> = emptyList(),
+    /** Winners of the pots decided so far, in the same order as [pots]. */
+    val potWinners: List<List<String>> = emptyList(),
 ) {
     val isActive: Boolean get() = phase != RoundPhase.FINISHED
     val activeHands: List<Hand> get() = hands.filter { it.status != HandStatus.PACKED }
@@ -130,6 +181,9 @@ data class GameState(
     val version: Long = 0,
 ) {
     val isRoundActive: Boolean get() = round?.isActive == true
+
+    /** "hand" in poker, "round" in 3 Patti. */
+    val roundWord: String get() = if (settings.isPoker) "hand" else "round"
     val hostName: String get() = players.firstOrNull { it.isHost }?.name ?: "Host"
 
     fun player(id: String?): Player? = players.firstOrNull { it.id == id }

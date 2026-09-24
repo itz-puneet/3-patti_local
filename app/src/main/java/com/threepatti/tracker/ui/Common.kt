@@ -227,18 +227,23 @@ enum class PillTone { Primary, Secondary, Tertiary, Muted, Error }
 fun playerStatus(state: GameState, player: Player): Pair<String, PillTone> {
     val round = state.round
     val hand = round?.hand(player.id)
+    val poker = state.settings.isPoker
+    val folded = if (poker) "Folded" else "Packed"
     return when {
-        round != null && round.isActive && hand != null -> when (hand.status) {
-            HandStatus.BLIND -> "Blind" to PillTone.Secondary
-            HandStatus.SEEN -> "Seen" to PillTone.Tertiary
-            HandStatus.PACKED -> "Packed" to PillTone.Muted
+        round != null && round.isActive && hand != null -> when {
+            hand.status == HandStatus.PACKED -> folded to PillTone.Muted
+            hand.allIn -> "All-in" to PillTone.Error
+            hand.status == HandStatus.BLIND -> "Blind" to PillTone.Secondary
+            hand.status == HandStatus.SEEN -> "Seen" to PillTone.Tertiary
+            else -> "In" to PillTone.Tertiary
         }
         round != null && !round.isActive && player.id in round.winnerIds -> "Won" to PillTone.Primary
         round != null && !round.isActive && hand != null ->
-            (if (hand.status == HandStatus.PACKED) "Packed" else "Lost") to PillTone.Muted
+            (if (hand.status == HandStatus.PACKED) folded else "Lost") to PillTone.Muted
         player.sittingOut -> "Sitting out" to PillTone.Muted
-        round != null && round.isActive -> "Next round" to PillTone.Muted
-        player.balance < state.settings.bootAmount -> "Needs chips" to PillTone.Error
+        round != null && round.isActive -> "Next ${state.roundWord}" to PillTone.Muted
+        poker && player.balance == 0 -> "Needs chips" to PillTone.Error
+        !poker && player.balance < state.settings.bootAmount -> "Needs chips" to PillTone.Error
         else -> "Ready" to PillTone.Muted
     }
 }

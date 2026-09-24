@@ -3,6 +3,8 @@ package com.threepatti.core.net
 import com.threepatti.core.Actor
 import com.threepatti.core.GameAction
 import com.threepatti.core.GameState
+import com.threepatti.core.PokerOptions
+import com.threepatti.core.PokerRules
 import com.threepatti.core.Rules
 import com.threepatti.core.SeatOptions
 import com.threepatti.core.Settlement
@@ -37,6 +39,8 @@ data class WebUpdate(
     val playerId: String,
     val state: GameState,
     val options: SeatOptions,
+    /** Set at poker tables instead of [options]. */
+    val poker: PokerOptions? = null,
     val transfers: List<Transfer>,
     val roundText: String?,
     val rulesSummary: String,
@@ -215,6 +219,7 @@ class WebServer(
         playerId = playerId,
         state = state,
         options = Rules.seatOptions(state, playerId),
+        poker = if (state.settings.isPoker) PokerRules.options(state, playerId) else null,
         transfers = Settlement.transfers(state.players),
         roundText = state.round?.let { describeRound(state, it) },
         rulesSummary = state.settings.summary(),

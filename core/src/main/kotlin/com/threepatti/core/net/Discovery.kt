@@ -15,6 +15,7 @@ data class DiscoveredTable(
     val hostName: String,
     val players: Int,
     val protocol: Int,
+    val game: String = "3 Patti",
 ) {
     val compatible: Boolean get() = protocol == Wire.PROTOCOL_VERSION
 }
@@ -63,6 +64,7 @@ object Discovery {
                         hostName = announcement.hostName,
                         players = announcement.players,
                         protocol = announcement.protocol,
+                        game = announcement.game,
                     )
                 }
             }

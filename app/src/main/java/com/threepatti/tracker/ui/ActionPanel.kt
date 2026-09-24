@@ -78,6 +78,10 @@ fun ActionPanel(
         ) {
             when {
                 round == null || round.phase == RoundPhase.FINISHED -> BetweenRounds(state, isHost, onAction)
+                state.settings.isPoker && round.phase == RoundPhase.BETTING -> PokerBetting(
+                    state, round, seatId, myId, takeOverOffer, takeOver, { takeOver = !takeOver }, onAction, onOpen,
+                )
+                state.settings.isPoker -> PokerShowdown(state, round, isHost, onOpen)
                 round.phase == RoundPhase.BETTING -> Betting(
                     state, round, seatId, myId, takeOverOffer, takeOver, { takeOver = !takeOver }, onAction, onOpen,
                 )
@@ -94,7 +98,8 @@ fun ActionPanel(
 @Composable
 private fun BetweenRounds(state: GameState, isHost: Boolean, onAction: (GameAction) -> Unit) {
     val round = state.round
-    val boot = state.settings.bootAmount
+    val settings = state.settings
+    val word = state.roundWord
     if (round != null) {
         Text(
             winnerText(state, round),
@@ -106,24 +111,29 @@ private fun BetweenRounds(state: GameState, isHost: Boolean, onAction: (GameActi
         )
     }
     if (isHost) {
-        val ready = state.players.count { !it.sittingOut && it.balance >= boot }
+        val ready = state.players.count {
+            !it.sittingOut && if (settings.isPoker) it.balance > 0 else it.balance >= settings.bootAmount
+        }
         Button(
             onClick = { onAction(GameAction.StartRound) },
             enabled = ready >= 2,
             modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) { Text(if (round == null) "Start round" else "Start next round") }
+        ) { Text(if (round == null) "Start $word" else "Start next $word") }
         Hint(
-            if (ready < 2) {
-                "Need at least 2 players with ${state.money(boot)} or more"
-            } else {
-                "Deal the cards, then start. Boot of ${state.money(boot)} from $ready players"
+            when {
+                ready < 2 && settings.isPoker -> "Need at least 2 players with chips"
+                ready < 2 -> "Need at least 2 players with ${state.money(settings.bootAmount)} or more"
+                settings.isPoker ->
+                    "Shuffle and deal, then start. Blinds ${state.money(settings.smallBlind)}/${state.money(settings.bigBlind)} " +
+                        "are posted automatically"
+                else -> "Deal the cards, then start. Boot of ${state.money(settings.bootAmount)} from $ready players"
             },
             center = true,
             modifier = Modifier.fillMaxWidth(),
         )
     } else {
         Text(
-            "Waiting for ${state.hostName} to start the ${if (round == null) "" else "next "}round",
+            "Waiting for ${state.hostName} to start the ${if (round == null) "" else "next "}$word",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -312,7 +322,7 @@ private fun Showdown(state: GameState, round: Round, isHost: Boolean, onOpen: (G
 }
 
 @Composable
-private fun Header(
+internal fun Header(
     title: String,
     detail: String?,
     takeOverOffer: Player?,
@@ -350,7 +360,7 @@ private fun seatSummary(state: GameState, options: SeatOptions): String? {
 }
 
 @Composable
-private fun RowScope.BigButton(
+internal fun RowScope.BigButton(
     label: String,
     amount: String?,
     enabled: Boolean,
@@ -379,7 +389,7 @@ private fun RowScope.BigButton(
 }
 
 @Composable
-private fun RowScope.SmallButton(
+internal fun RowScope.SmallButton(
     label: String,
     enabled: Boolean = true,
     danger: Boolean = false,

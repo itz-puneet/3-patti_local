@@ -98,8 +98,13 @@ private fun PotCard(state: GameState) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            val word = state.roundWord.uppercase()
             if (round == null) {
-                Text("No round running", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (state.settings.isPoker) "No hand being played" else "No round running",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 Text(
                     "Everyone starts with ${state.money(state.settings.startingBalance)}",
                     style = MaterialTheme.typography.bodyMedium,
@@ -107,7 +112,7 @@ private fun PotCard(state: GameState) {
                 Text(state.settings.summary(), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
             } else {
                 Text(
-                    if (round.isActive) "ROUND ${round.number}  ·  POT" else "ROUND ${round.number} FINISHED",
+                    if (round.isActive) "$word ${round.number}  ·  POT" else "$word ${round.number} FINISHED",
                     style = MaterialTheme.typography.labelMedium,
                     letterSpacing = 1.5.sp,
                 )
@@ -116,7 +121,12 @@ private fun PotCard(state: GameState) {
                     style = MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.Bold,
                 )
-                if (round.isActive) {
+                if (round.isActive && state.settings.isPoker) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        StakeLabel("Blinds", "${state.money(state.settings.smallBlind)}/${state.money(state.settings.bigBlind)}")
+                        if (round.phase == RoundPhase.BETTING) StakeLabel("Bet", state.money(round.currentBet))
+                    }
+                } else if (round.isActive) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                         StakeLabel("Blind", state.money(round.stake))
                         StakeLabel("Chaal", state.money(round.stake * 2))
@@ -183,7 +193,11 @@ private fun PlayerRowContent(state: GameState, player: Player, isMe: Boolean, hi
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 if (round != null && round.isActive && round.dealerId == player.id) {
-                    StatusPill("Dealer", colors.secondary, colors.onSecondary)
+                    StatusPill(if (state.settings.isPoker) "D" else "Dealer", colors.secondary, colors.onSecondary)
+                }
+                if (round != null && round.isActive && state.settings.isPoker) {
+                    if (round.smallBlindId == player.id) StatusPill("SB", colors.tertiaryContainer, colors.onTertiaryContainer)
+                    if (round.bigBlindId == player.id) StatusPill("BB", colors.tertiaryContainer, colors.onTertiaryContainer)
                 }
                 if (player.isHost) StatusPill("Host", colors.surfaceVariant, colors.onSurfaceVariant)
             }
@@ -191,8 +205,14 @@ private fun PlayerRowContent(state: GameState, player: Player, isMe: Boolean, hi
                 val (label, tone) = playerStatus(state, player)
                 val (container, content) = toneColors(tone)
                 StatusPill(label, container, content)
-                if (round != null && round.isActive && hand != null) {
-                    Hint("in pot ${formatMoney(hand.invested, currency)}")
+                if (round != null && round.isActive && hand != null && hand.invested > 0) {
+                    Hint(
+                        if (state.settings.isPoker && hand.streetBet > 0) {
+                            "bet ${formatMoney(hand.streetBet, currency)} · in pot ${formatMoney(hand.invested, currency)}"
+                        } else {
+                            "in pot ${formatMoney(hand.invested, currency)}"
+                        },
+                    )
                 }
             }
             when {

@@ -37,6 +37,21 @@ sealed class GameAction {
     @SerialName("side_show_answer")
     data class AnswerSideShow(override val playerId: String, val accept: Boolean) : GameAction(), SeatAction
 
+    // Poker moves. Folding uses [Pack].
+
+    @Serializable
+    @SerialName("check")
+    data class Check(override val playerId: String) : GameAction(), SeatAction
+
+    @Serializable
+    @SerialName("call")
+    data class Call(override val playerId: String) : GameAction(), SeatAction
+
+    /** Bet or raise so that this player's bet in the current betting round becomes [amount]. */
+    @Serializable
+    @SerialName("raise_to")
+    data class RaiseTo(override val playerId: String, val amount: Int) : GameAction(), SeatAction
+
     // Host controls.
 
     @Serializable

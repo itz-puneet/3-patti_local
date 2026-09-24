@@ -131,6 +131,28 @@ class WebServerTest {
     }
 
     @Test
+    fun pokerTablesSendPokerOptions() {
+        val pokerTable = TableHost(
+            HostSnapshot(GameEngine.newTable("Poker", TableSettings(game = GameType.POKER, startingBalance = 100), "Asha")),
+        )
+        val pokerServer = WebServer(pokerTable, scope, requestedPort = 0)
+        pokerServer.start()
+        try {
+            val socket = Socket("127.0.0.1", pokerServer.port).apply { soTimeout = 5_000 }
+            socket.use {
+                it.getOutputStream().write("GET /events?device=web-p&name=Priya HTTP/1.1\r\n\r\n".toByteArray())
+                val reader = it.getInputStream().bufferedReader()
+                val data = generateSequence { reader.readLine() }.first { line -> line.startsWith("data: ") }
+                val update = Wire.json.decodeFromString(WebUpdate.serializer(), data.removePrefix("data: "))
+                assertTrue(update.poker != null && !update.poker!!.inHand)
+                assertEquals("Blinds ₹1/₹2 · no limit", update.rulesSummary)
+            }
+        } finally {
+            pokerServer.stop()
+        }
+    }
+
+    @Test
     fun sameBrowserGetsItsSeatBack() {
         server.start()
         val me = Browser("web-ravi", "Ravi").use { it.nextUpdate().playerId }

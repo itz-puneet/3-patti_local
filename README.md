@@ -1,13 +1,14 @@
 # 3 Patti Chips Handler
 
-An Android app for keeping track of chips while you play 3 Patti (Teen Patti) with **real cards**.
+An Android app for keeping track of chips while you play **3 Patti (Teen Patti) or poker** with **real cards**.
 One Android phone hosts the table and everyone else joins from their own phone over the local WiFi
 or the host's hotspot. Friends with an iPhone join from Safari by scanning a QR code. No internet or
 account needed.
 
-The app does the chip work: it collects the boot, knows what blind and seen players have to pay,
-tracks the pot, handles show and side show, pays out the winner and keeps a ledger of who is up or
-down, so at the end it tells you exactly who pays whom.
+The app does the chip work. In 3 Patti it collects the boot, knows what blind and seen players have
+to pay, and handles show and side show. In poker it posts the blinds, runs the four betting rounds,
+enforces minimum raises and pot limit, and splits side pots when players are all-in. Either way it pays
+out the winner and keeps a ledger of who is up or down, so at the end it tells you exactly who pays whom.
 
 ## Install
 
@@ -29,20 +30,23 @@ one and keeps your data.
 
 1. **Connect the phones.** Everyone joins the same WiFi, or the host turns on their phone's hotspot and
    the others connect to it.
-2. **Host a table.** The host enters their name, taps **Host a table**, sets the starting chips
-   (250 by default), boot, and optional limits, then taps **Open table**.
+2. **Host a table.** The host enters their name, taps **Host a table**, picks **3 Patti** or **Poker**,
+   sets the starting chips (250 by default) and the boot or blinds, then taps **Open table**. The game
+   is fixed for that table; open a new table to play the other one.
 3. **Join.** Everyone else enters their name and taps **Join a table**. The table shows up by itself.
    If it doesn't, type the address the host sees under **⋮ → Invite players**. iPhones scan the QR
    code on that same screen, enter their name in Safari and tap **Join the table**.
-4. **Play.** Deal real cards and the host taps **Start round**. Each player then acts on their own
-   phone when it's their turn: **See cards**, **Blind/Chaal**, **Raise**, **Pack**, **Show** or
-   **Side show**.
-5. **Results.** For a show or side show, compare cards on the table and the host taps who won. The pot
-   goes to the winner automatically.
+4. **Play.** Deal real cards and the host taps **Start round** (or **Start hand** in poker). Each player
+   then acts on their own phone when it's their turn. In 3 Patti: **See cards**, **Blind/Chaal**,
+   **Raise**, **Pack**, **Show** or **Side show**. In poker: **Fold**, **Check**, **Call**, **Bet** or
+   **Raise** (with a slider and Min / ½ pot / Pot / All-in shortcuts).
+5. **Results.** For a show, side show or poker showdown, compare cards on the table and the host taps
+   who won. With side pots the host picks the winner of each pot, main pot first. The chips go to the
+   winners automatically.
 6. **Settle up.** The **Ledger** tab shows everyone's chips and profit or loss, and a **Settle up** list
    of who pays whom.
 
-## Betting rules
+## 3 Patti betting rules
 
 | Rule | What the app does |
 | --- | --- |
@@ -58,6 +62,21 @@ one and keeps your data.
 | Side show | A seen player asks the previous seen player to compare privately. If accepted, the host enters the winner and the other packs. |
 
 Dealer and first turn move one seat each round. Players who can't pay the boot, or who sit out, are skipped.
+
+## Poker betting rules
+
+Works for Texas Hold'em, Omaha and other flop games; the host picks **No limit** or **Pot limit** per table.
+
+| Rule | What the app does |
+| --- | --- |
+| Blinds | The two seats after the dealer post the small and big blind. Heads-up the dealer posts the small blind. The dealer button moves one seat every hand. |
+| Betting rounds | Pre-flop, flop, turn and river. Pre-flop the player after the big blind acts first and the big blind gets the option; after that the first player after the dealer starts. |
+| Check / Call / Bet / Raise | A raise must be at least as big as the last bet or raise. |
+| No limit | Bet any amount up to all your chips. |
+| Pot limit | The most you can bet or raise is the size of the pot (after calling). |
+| All-in | An all-in for less than a full raise doesn't let players who already acted raise again. |
+| Side pots | Made automatically when players are all-in for different amounts. Chips nobody called go straight back. |
+| Showdown | Everyone still in shows; the host taps the winner of each pot. Ties can be split. |
 
 ## Host tools
 

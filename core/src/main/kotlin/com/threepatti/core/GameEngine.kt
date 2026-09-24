@@ -4,11 +4,14 @@ import com.threepatti.core.GameAction.AddPlayer
 import com.threepatti.core.GameAction.AdjustChips
 import com.threepatti.core.GameAction.AnswerSideShow
 import com.threepatti.core.GameAction.Bet
+import com.threepatti.core.GameAction.Call
 import com.threepatti.core.GameAction.CancelRound
+import com.threepatti.core.GameAction.Check
 import com.threepatti.core.GameAction.DeclareWinners
 import com.threepatti.core.GameAction.ForceShow
 import com.threepatti.core.GameAction.MoveSeat
 import com.threepatti.core.GameAction.Pack
+import com.threepatti.core.GameAction.RaiseTo
 import com.threepatti.core.GameAction.RemovePlayer
 import com.threepatti.core.GameAction.RenamePlayer
 import com.threepatti.core.GameAction.RequestSideShow
@@ -41,7 +44,10 @@ object GameEngine {
         )
         val title = collapseSpaces(tableName).take(MAX_TABLE_NAME_LENGTH).trim().ifEmpty { "$name's table" }
         return GameState(tableName = title, settings = settings, players = listOf(host), nextPlayerNumber = 2)
-            .withLog("$name opened the table. Everyone starts with ${formatMoney(settings.startingBalance, settings.currency)}")
+            .withLog(
+                "$name opened a ${settings.gameName()} table (${settings.summary()}). " +
+                    "Everyone starts with ${formatMoney(settings.startingBalance, settings.currency)}",
+            )
     }
 
     /** Seats a new player and returns the new state together with the player's id. */
@@ -109,16 +115,21 @@ object GameEngine {
 
     fun apply(state: GameState, action: GameAction, actor: Actor = Actor.Host): GameState {
         authorize(state, action, actor)
+        val poker = state.settings.isPoker
         val next = when (action) {
-            is SeeCards -> seeCards(state, action.playerId)
-            is Bet -> bet(state, action.playerId, action.raise)
-            is Pack -> pack(state, action.playerId)
-            is Show -> show(state, action.playerId)
-            is RequestSideShow -> requestSideShow(state, action.playerId)
-            is AnswerSideShow -> answerSideShow(state, action.playerId, action.accept)
-            StartRound -> startRound(state)
-            is DeclareWinners -> declareWinners(state, action.winnerIds)
-            ForceShow -> forceShow(state)
+            is SeeCards -> teenPattiOnly(poker) { seeCards(state, action.playerId) }
+            is Bet -> teenPattiOnly(poker) { bet(state, action.playerId, action.raise) }
+            is Show -> teenPattiOnly(poker) { show(state, action.playerId) }
+            is RequestSideShow -> teenPattiOnly(poker) { requestSideShow(state, action.playerId) }
+            is AnswerSideShow -> teenPattiOnly(poker) { answerSideShow(state, action.playerId, action.accept) }
+            is Check -> pokerOnly(poker) { PokerEngine.check(state, action.playerId) }
+            is Call -> pokerOnly(poker) { PokerEngine.call(state, action.playerId) }
+            is RaiseTo -> pokerOnly(poker) { PokerEngine.raiseTo(state, action.playerId, action.amount) }
+            is Pack -> if (poker) PokerEngine.fold(state, action.playerId) else pack(state, action.playerId)
+            StartRound -> if (poker) PokerEngine.startHand(state) else startRound(state)
+            is DeclareWinners ->
+                if (poker) PokerEngine.declarePotWinners(state, action.winnerIds) else declareWinners(state, action.winnerIds)
+            ForceShow -> if (poker) PokerEngine.showdown(state, "Host called the showdown") else forceShow(state)
             CancelRound -> cancelRound(state)
             is AddPlayer -> seatPlayer(state, action.name, hasDevice = false).first
             is RemovePlayer -> removePlayer(state, action.playerId)
@@ -130,6 +141,12 @@ object GameEngine {
         }
         return next.bumped()
     }
+
+    private inline fun teenPattiOnly(poker: Boolean, move: () -> GameState): GameState =
+        if (poker) fail("That move is not part of poker") else move()
+
+    private inline fun pokerOnly(poker: Boolean, move: () -> GameState): GameState =
+        if (poker) move() else fail("That move is not part of 3 Patti")
 
     private fun authorize(state: GameState, action: GameAction, actor: Actor) {
         val playerId = (actor as? Actor.Remote)?.playerId ?: return
@@ -180,7 +197,7 @@ object GameEngine {
         val name = state.nameOf(playerId)
         val hand = round.hand(playerId) ?: fail("$name is not in this round")
         when (hand.status) {
-            HandStatus.SEEN -> fail("$name has already seen their cards")
+            HandStatus.SEEN, HandStatus.ACTIVE -> fail("$name has already seen their cards")
             HandStatus.PACKED -> fail("$name has packed")
             HandStatus.BLIND -> Unit
         }
@@ -305,7 +322,7 @@ object GameEngine {
             next = next.updatePlayer(hand.playerId) { it.copy(balance = it.balance + hand.invested) }
         }
         return next.copy(round = null, lastDealerId = round.previousDealerId)
-            .withLog("Round ${round.number} cancelled, all bets returned")
+            .withLog("${state.roundWord.replaceFirstChar { it.uppercase() }} ${round.number} cancelled, all bets returned")
     }
 
     private fun afterPayment(state: GameState, playerId: String): GameState =
@@ -353,16 +370,6 @@ object GameEngine {
         ).withLog(text)
     }
 
-    private fun nextDealer(players: List<Player>, lastDealerId: String?, eligible: Set<String>): String {
-        val ids = players.map { it.id }
-        val start = ids.indexOf(lastDealerId)
-        for (i in 1..ids.size) {
-            val id = ids[(start + i).mod(ids.size)]
-            if (id in eligible) return id
-        }
-        return eligible.first()
-    }
-
     // Table management.
 
     private fun seatPlayer(
@@ -392,7 +399,7 @@ object GameEngine {
     private fun removePlayer(state: GameState, playerId: String): GameState {
         val player = state.player(playerId) ?: fail("Player not found")
         if (player.isHost) fail("The host can't be removed")
-        if (state.round?.let { it.isActive && it.hand(playerId) != null } == true) fail("${player.name} is playing this round")
+        if (state.round?.let { it.isActive && it.hand(playerId) != null } == true) fail("${player.name} is playing this ${state.roundWord}")
         if (player.net != 0) {
             fail("${player.name} is at ${formatSignedMoney(player.net, state.settings.currency)}. Settle up first, or let them sit out")
         }
@@ -427,11 +434,11 @@ object GameEngine {
         val player = state.player(playerId) ?: fail("Player not found")
         if (player.sittingOut == sittingOut) return state
         return state.updatePlayer(playerId) { it.copy(sittingOut = sittingOut) }
-            .withLog(if (sittingOut) "${player.name} will sit out from the next round" else "${player.name} is back in the game")
+            .withLog(if (sittingOut) "${player.name} will sit out from the next ${state.roundWord}" else "${player.name} is back in the game")
     }
 
     private fun moveSeat(state: GameState, playerId: String, offset: Int): GameState {
-        if (state.isRoundActive) fail("Change seats between rounds")
+        if (state.isRoundActive) fail("Change seats between ${state.roundWord}s")
         val index = state.players.indexOfFirst { it.id == playerId }
         if (index < 0) fail("Player not found")
         val target = (index + offset).coerceIn(0, state.players.lastIndex)
@@ -442,7 +449,10 @@ object GameEngine {
     }
 
     private fun updateSettings(state: GameState, settings: TableSettings): GameState {
-        if (state.isRoundActive) fail("Change settings between rounds")
+        if (state.isRoundActive) fail("Change settings between ${state.roundWord}s")
+        if (settings.game != state.settings.game) {
+            fail("This table plays ${state.settings.gameName()}. Open a new table to play ${settings.gameName()}")
+        }
         settings.validationError()?.let { fail(it) }
         if (settings == state.settings) return state
         return state.copy(settings = settings).withLog("Table settings changed: ${settings.summary()}")
@@ -462,30 +472,4 @@ object GameEngine {
         while ("$name $i".lowercase() in taken) i++
         return "$name $i"
     }
-
-    private fun fail(message: String): Nothing = throw GameRuleException(message)
-
-    private fun GameState.bumped(): GameState = copy(version = version + 1)
-
-    private fun GameState.withLog(text: String): GameState {
-        val seq = (log.lastOrNull()?.seq ?: 0) + 1
-        return copy(log = (log + LogEntry(seq, text)).takeLast(MAX_LOG))
-    }
-
-    private fun GameState.updatePlayer(id: String, change: (Player) -> Player): GameState =
-        copy(players = players.map { if (it.id == id) change(it) else it })
-
-    private fun GameState.updateRound(change: (Round) -> Round): GameState = copy(round = change(round!!))
-
-    private fun GameState.updateHand(id: String, change: (Hand) -> Hand): GameState =
-        updateRound { r -> r.copy(hands = r.hands.map { if (it.playerId == id) change(it) else it }) }
-
-    private fun GameState.pay(id: String, amount: Int): GameState =
-        updatePlayer(id) { it.copy(balance = it.balance - amount) }
-            .updateRound { r ->
-                r.copy(
-                    pot = r.pot + amount,
-                    hands = r.hands.map { if (it.playerId == id) it.copy(invested = it.invested + amount) else it },
-                )
-            }
 }

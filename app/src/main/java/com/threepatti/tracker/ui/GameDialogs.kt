@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import com.threepatti.core.GameAction
 import com.threepatti.core.GameState
 import com.threepatti.core.HandStatus
+import com.threepatti.core.PokerRules
 import com.threepatti.core.RoundPhase
 import com.threepatti.core.TableSettings
 import com.threepatti.core.formatSignedMoney
@@ -54,6 +55,7 @@ fun GameDialogs(
         session.submit(it)
         onDismiss()
     }
+    val poker = state.settings.isPoker
     when (dialog) {
         GameDialog.Invite -> InviteDialog(session.addresses(), session.webLinks(), onDismiss)
         GameDialog.AddPlayer -> TextInputDialog(
@@ -78,16 +80,20 @@ fun GameDialogs(
             confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
         )
         GameDialog.ForceShow -> ConfirmDialog(
-            title = "Call a show for everyone?",
-            text = "Everyone still playing shows their cards, and you enter the winner.",
-            confirmLabel = "Call show",
+            title = if (poker) "Go to the showdown now?" else "Call a show for everyone?",
+            text = if (poker) {
+                "Betting stops. Deal the rest of the board, everyone still in shows their cards, and you enter who won each pot."
+            } else {
+                "Everyone still playing shows their cards, and you enter the winner."
+            },
+            confirmLabel = if (poker) "Showdown" else "Call show",
             onConfirm = { submit(GameAction.ForceShow) },
             onDismiss = onDismiss,
         )
         GameDialog.CancelRound -> ConfirmDialog(
-            title = "Cancel this round?",
-            text = "Use this for a misdeal. Every bet of this round goes back to its player.",
-            confirmLabel = "Cancel round",
+            title = "Cancel this ${state.roundWord}?",
+            text = "Use this for a misdeal. Every bet of this ${state.roundWord} goes back to its player.",
+            confirmLabel = "Cancel ${state.roundWord}",
             destructive = true,
             onConfirm = { submit(GameAction.CancelRound) },
             onDismiss = onDismiss,
@@ -149,10 +155,11 @@ fun GameDialogs(
         is GameDialog.ConfirmPack -> {
             val invested = state.round?.hand(dialog.playerId)?.invested ?: 0
             val mine = dialog.playerId == myId
+            val verb = if (poker) "Fold" else "Pack"
             ConfirmDialog(
-                title = if (mine) "Pack your hand?" else "Pack ${state.nameOf(dialog.playerId)}'s hand?",
+                title = if (mine) "$verb your hand?" else "$verb ${state.nameOf(dialog.playerId)}'s hand?",
                 text = "The ${state.money(invested)} already in the pot stays there.",
-                confirmLabel = "Pack",
+                confirmLabel = verb,
                 destructive = true,
                 onConfirm = { submit(GameAction.Pack(dialog.playerId)) },
                 onDismiss = onDismiss,
@@ -167,6 +174,22 @@ fun GameDialogs(
                 ConfirmDialog(
                     title = "${state.nameOf(ids[0])} wins the side show?",
                     text = "${state.nameOf(loser)} packs and betting continues.",
+                    confirmLabel = "Confirm",
+                    onConfirm = { submit(GameAction.DeclareWinners(ids)) },
+                    onDismiss = onDismiss,
+                )
+            } else if (poker && round != null) {
+                val index = round.potWinners.size
+                val pot = round.pots.getOrNull(index)
+                val label = PokerRules.potLabel(round, index).lowercase()
+                val amount = state.money(pot?.amount ?: 0)
+                ConfirmDialog(
+                    title = if (ids.size == 1) "${state.nameOf(ids[0])} wins the $label?" else "Split the $label?",
+                    text = if (ids.size == 1) {
+                        "${state.nameOf(ids[0])} gets $amount."
+                    } else {
+                        "${state.namesOf(ids)} share $amount."
+                    },
                     confirmLabel = "Confirm",
                     onConfirm = { submit(GameAction.DeclareWinners(ids)) },
                     onDismiss = onDismiss,
@@ -224,11 +247,13 @@ private fun PlayerMenuDialog(
                     if (hand != null && hand.status == HandStatus.BLIND) {
                         MenuAction("Mark cards as seen") { onAction(GameAction.SeeCards(playerId)) }
                     }
-                    if (hand != null && hand.status != HandStatus.PACKED && round?.phase == RoundPhase.BETTING) {
-                        MenuAction("Pack this hand") { onOpen(GameDialog.ConfirmPack(playerId)) }
+                    if (hand != null && hand.status != HandStatus.PACKED && !hand.allIn && round?.phase == RoundPhase.BETTING) {
+                        MenuAction(if (state.settings.isPoker) "Fold this hand" else "Pack this hand") {
+                            onOpen(GameDialog.ConfirmPack(playerId))
+                        }
                     }
                 }
-                MenuAction(if (player.sittingOut) "Sit back in" else "Sit out from next round") {
+                MenuAction(if (player.sittingOut) "Sit back in" else "Sit out from next ${state.roundWord}") {
                     onAction(GameAction.SetSittingOut(playerId, !player.sittingOut))
                 }
                 MenuAction("Rename") { onOpen(GameDialog.Rename(playerId)) }
@@ -339,7 +364,10 @@ private fun SettingsDialog(settings: TableSettings, onSave: (TableSettings) -> U
         title = { Text("Table settings") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Hint("Changes apply from the next round. Starting chips only affect players who join later.")
+                Hint(
+                    "Changes apply from the next ${if (settings.isPoker) "hand" else "round"}. " +
+                        "Starting chips only affect players who join later.",
+                )
                 SettingsFields(input, onChange = { input = it })
                 if (error != null) {
                     Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
