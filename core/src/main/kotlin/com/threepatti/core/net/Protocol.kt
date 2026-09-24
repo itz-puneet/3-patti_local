@@ -12,7 +12,7 @@ import kotlinx.serialization.json.Json
  */
 object Wire {
     /** Bump when messages change in a way older app versions can't read. */
-    const val PROTOCOL_VERSION = 2
+    const val PROTOCOL_VERSION = 3
     const val DEFAULT_PORT = 47474
     const val DISCOVERY_PORT = 47475
     const val DISCOVERY_REQUEST = "3PATTI_TRACKER_DISCOVER_V1"

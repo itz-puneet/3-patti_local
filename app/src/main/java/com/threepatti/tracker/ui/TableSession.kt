@@ -16,6 +16,9 @@ interface TableSession {
     val connection: StateFlow<ConnectionStatus>
     val canUndo: StateFlow<Boolean>
 
+    /** What undo would reverse next (host only), shown before the host confirms. */
+    val nextUndo: StateFlow<String?>
+
     /** Short messages to show the user, such as a refused move. */
     val messages: SharedFlow<String>
 

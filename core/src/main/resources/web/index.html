@@ -116,6 +116,7 @@ tfoot td { font-weight: 600; }
 .transfer .to { flex: 1; }
 h2 { font-size: 17px; margin: 8px 0 0; }
 .log { font-size: 13px; color: var(--muted); padding: 2px 0; }
+.log.neg { color: var(--error); }
 
 /* Dialog and toast */
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 10; }
@@ -192,7 +193,14 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     render();
     es = new EventSource("/events?device=" + encodeURIComponent(deviceId) + "&name=" + encodeURIComponent(name));
     es.addEventListener("update", function (ev) {
-      data = JSON.parse(ev.data);
+      var fresh = JSON.parse(ev.data);
+      // Tell this player whenever the host uses undo, so nothing changes behind anyone's back.
+      if (data && fresh.state.log.length) {
+        var seen = data.state.log.length ? data.state.log[data.state.log.length - 1].seq : 0;
+        var undos = fresh.state.log.filter(function (e) { return e.seq > seen && e.kind === "UNDO"; });
+        if (undos.length) showToast(undos[undos.length - 1].text);
+      }
+      data = fresh;
       status = "live";
       store.set("joined", "1");
       render();
@@ -409,18 +417,32 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   }
 
   function historyTab(u) {
-    var s = u.state, html = "<h2>Rounds</h2>";
-    if (!s.results.length) html += '<div class="muted">No rounds finished yet.</div>';
+    var s = u.state, Word = word(s).charAt(0).toUpperCase() + word(s).slice(1), html = "";
+    if (s.undoCount > 0) {
+      html += '<div class="card" style="background:var(--error-c);color:var(--on-error-c)">The host used undo ' + s.undoCount +
+        (s.undoCount === 1 ? " time" : " times") + ". Undone moves stay below, crossed out.</div>";
+    }
+    html += "<h2>" + Word + "s</h2>";
+    if (!s.results.length) html += '<div class="muted">No ' + word(s) + "s finished yet.</div>";
     s.results.slice().reverse().forEach(function (res) {
       var changes = Object.keys(res.changes).map(function (id) { return [id, res.changes[id]]; })
         .sort(function (a, b) { return b[1] - a[1]; })
         .map(function (c) { return esc(nameOf(s, c[0])) + ' <b class="' + netClass(c[1]) + '">' + signed(c[1]) + "</b>"; }).join(" &nbsp; ");
-      html += '<div class="card"><div class="row"><b>Round ' + res.number + '</b><span style="text-align:right">Pot ' + money(res.pot) +
-        '</span></div><div class="pos bold">' + (res.winnerNames.length === 1 ? "Winner: " : "Split between: ") +
-        esc(res.winnerNames.join(", ")) + '</div><div class="small">' + changes + "</div></div>";
+      var strike = res.undone ? ' style="text-decoration:line-through;opacity:.6"' : "";
+      html += '<div class="card"><div class="row"><b>' + Word + " " + res.number + "</b>" +
+        (res.undone ? '<span><span class="pill err">Undone by host</span></span>' : "") +
+        '<span style="text-align:right"' + strike + ">Pot " + money(res.pot) +
+        "</span></div><div class=\"pos bold\"" + strike + ">" + (res.winnerNames.length === 1 ? "Winner: " : "Split between: ") +
+        esc(res.winnerNames.join(", ")) + '</div><div class="small"' + strike + ">" + changes + "</div>" +
+        (res.undone ? '<div class="small muted">Not counted: the chips went back to how they were before this result.</div>' : "") +
+        "</div>";
     });
     html += "<h2>Table log</h2>";
-    s.log.slice().reverse().forEach(function (e) { html += '<div class="log">' + esc(e.text) + "</div>"; });
+    s.log.slice().reverse().forEach(function (e) {
+      if (e.kind === "UNDO") html += '<div class="log neg bold">' + esc(e.text) + "</div>";
+      else if (e.undone) html += '<div class="log" style="text-decoration:line-through;opacity:.6">' + esc(e.text) + " (undone)</div>";
+      else html += '<div class="log">' + esc(e.text) + "</div>";
+    });
     return html;
   }
 

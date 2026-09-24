@@ -6,9 +6,9 @@ internal fun fail(message: String): Nothing = throw GameRuleException(message)
 
 internal fun GameState.bumped(): GameState = copy(version = version + 1)
 
-internal fun GameState.withLog(text: String): GameState {
+internal fun GameState.withLog(text: String, kind: LogKind = LogKind.MOVE): GameState {
     val seq = (log.lastOrNull()?.seq ?: 0) + 1
-    return copy(log = (log + LogEntry(seq, text)).takeLast(GameEngine.MAX_LOG))
+    return copy(log = (log + LogEntry(seq, text, kind)).takeLast(GameEngine.MAX_LOG))
 }
 
 internal fun GameState.updatePlayer(id: String, change: (Player) -> Player): GameState =

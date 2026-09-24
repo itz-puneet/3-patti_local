@@ -109,6 +109,7 @@ class HostTableSession(
     override val myPlayerId: StateFlow<String?> = MutableStateFlow(table.hostPlayerId)
     override val connection: StateFlow<ConnectionStatus> = MutableStateFlow(ConnectionStatus.Connected)
     override val canUndo: StateFlow<Boolean> = table.canUndo
+    override val nextUndo: StateFlow<String?> = table.nextUndo
     override val messages: SharedFlow<String> = _messages.asSharedFlow()
     override val hostAddress: String? = null
 
@@ -169,6 +170,7 @@ class ClientTableSession(
     override val myPlayerId: StateFlow<String?> = client.playerId
     override val connection: StateFlow<ConnectionStatus> = client.status
     override val canUndo: StateFlow<Boolean> = MutableStateFlow(false)
+    override val nextUndo: StateFlow<String?> = MutableStateFlow(null)
     override val messages: SharedFlow<String> = client.errors
     override val hostAddress: String = if (port == Wire.DEFAULT_PORT) host else "$host:$port"
 

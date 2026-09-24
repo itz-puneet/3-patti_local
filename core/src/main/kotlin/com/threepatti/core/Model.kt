@@ -171,10 +171,30 @@ data class RoundResult(
     val winnerNames: List<String>,
     /** Chips won or lost in this round by every player who was dealt in. */
     val changes: Map<String, Int>,
+    /** The host undid this result. It stays in the history, crossed out, and doesn't count. */
+    val undone: Boolean = false,
 )
 
 @Serializable
-data class LogEntry(val seq: Long, val text: String)
+enum class LogKind {
+    /** A move or host action. Undo can reverse it. */
+    MOVE,
+
+    /** A phone joined or took over a seat. Undo never reverses this. */
+    SEAT,
+
+    /** The host used undo. */
+    UNDO,
+}
+
+/** One line of the table log. Lines are never deleted by undo; undone moves are only marked. */
+@Serializable
+data class LogEntry(
+    val seq: Long,
+    val text: String,
+    val kind: LogKind = LogKind.MOVE,
+    val undone: Boolean = false,
+)
 
 @Serializable
 data class GameState(
@@ -187,8 +207,13 @@ data class GameState(
     val results: List<RoundResult> = emptyList(),
     val log: List<LogEntry> = emptyList(),
     val nextPlayerNumber: Int = 1,
+    /** How many times the host has used undo at this table. */
+    val undoCount: Int = 0,
     val version: Long = 0,
 ) {
+    /** Number the next round or hand gets. Undone results don't count. */
+    val nextRoundNumber: Int get() = results.count { !it.undone } + 1
+
     val isRoundActive: Boolean get() = round?.isActive == true
 
     /** "hand" in poker, "round" in 3 Patti. */

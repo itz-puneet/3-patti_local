@@ -35,21 +35,71 @@ class TableHostTest {
         assertFalse(host.canUndo.value)
 
         assertNull(host.perform(StartRound))
+        assertFalse(host.canUndo.value, "starting a round can't be undone; Cancel round is for misdeals")
         assertNull(host.perform(Bet(ravi)))
         val meena = host.join("device-meena", "Meena")
         assertTrue(host.canUndo.value)
+        assertEquals("Ravi played blind ₹5", host.nextUndo.value)
 
         assertNull(host.undo())
-        val afterFirstUndo = host.state.value
-        assertEquals(245, afterFirstUndo.player(ravi)!!.balance)
-        assertTrue(afterFirstUndo.player(ravi)!!.connected)
-        assertEquals(250, afterFirstUndo.player(meena)!!.balance, "phone that joined later keeps its seat")
-        assertTrue(afterFirstUndo.log.last().text.startsWith("Host undid: Ravi played blind"))
+        val afterUndo = host.state.value
+        assertEquals(245, afterUndo.player(ravi)!!.balance)
+        assertTrue(afterUndo.player(ravi)!!.connected)
+        assertEquals(250, afterUndo.player(meena)!!.balance, "phone that joined later keeps its seat")
+        assertEquals(LogEntry(afterUndo.log.last().seq, "Host undid: Ravi played blind ₹5", LogKind.UNDO), afterUndo.log.last())
 
-        assertNull(host.undo())
-        assertNull(host.state.value.round)
-        assertEquals("Nothing to undo", host.undo())
+        assertEquals("Nothing to undo. Once a round starts, earlier rounds are final", host.undo())
         assertEquals(host.state.value, saved.last().state)
+    }
+
+    @Test
+    fun undoNeverErasesHistory() {
+        val host = host()
+        val ravi = host.join("device-ravi", "Ravi")
+        assertNull(host.perform(StartRound))
+        assertNull(host.perform(Bet(ravi)))
+        assertNull(host.perform(GameAction.ForceShow))
+        assertNull(host.perform(GameAction.DeclareWinners(listOf(ravi))))
+        val logBefore = host.state.value.log
+
+        // Oops, wrong winner: undo the payout and the show.
+        assertNull(host.undo())
+        assertNull(host.undo())
+        val s = host.state.value
+        assertEquals(RoundPhase.BETTING, s.round!!.phase)
+        assertEquals(2, s.undoCount)
+        assertTrue(s.log.map { it.text }.containsAll(logBefore.map { it.text }), "every line is still there")
+        val undone = s.log.filter { it.undone }.map { it.text }
+        assertEquals(listOf("Host called a show for everyone still playing", "Ravi won the pot of ₹15"), undone)
+        assertEquals(2, s.log.count { it.kind == LogKind.UNDO })
+        assertFalse(s.log.any { it.kind == LogKind.UNDO && it.undone })
+        assertFalse(s.log.any { it.kind == LogKind.SEAT && it.undone }, "joining is never marked undone")
+
+        // The undone result stays listed but doesn't count, so the round keeps its number.
+        assertEquals(1, s.results.size)
+        assertTrue(s.results.single().undone)
+        assertEquals(1, s.nextRoundNumber)
+        assertNull(host.perform(GameAction.ForceShow))
+        assertNull(host.perform(GameAction.DeclareWinners(listOf("p1"))))
+        val results = host.state.value.results
+        assertEquals(listOf(true, false), results.map { it.undone })
+        assertEquals(listOf(1, 1), results.map { it.number })
+        assertEquals(2, host.state.value.nextRoundNumber)
+    }
+
+    @Test
+    fun startingARoundLocksEarlierRounds() {
+        val host = host()
+        val ravi = host.join("device-ravi", "Ravi")
+        assertNull(host.perform(StartRound))
+        assertNull(host.perform(GameAction.Pack(ravi)))
+        assertTrue(host.canUndo.value, "the result can be fixed until the next round starts")
+        assertNull(host.perform(StartRound))
+        assertFalse(host.canUndo.value)
+        assertEquals("Nothing to undo. Once a round starts, earlier rounds are final", host.undo())
+        assertEquals(1, host.state.value.results.count { !it.undone })
+        assertNull(host.perform(GameAction.CancelRound))
+        assertEquals("Round 2 cancelled, all bets returned", host.nextUndo.value)
     }
 
     @Test

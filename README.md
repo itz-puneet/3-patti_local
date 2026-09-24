@@ -82,7 +82,14 @@ Works for Texas Hold'em, Omaha and other flop games; the host picks **No limit**
 
 ## Host tools
 
-- **Undo** the last action if someone tapped the wrong button.
+- **Undo** the last action if someone tapped the wrong button. Undo has limits so it can't be used to
+  quietly rewrite the game:
+  - Nothing is erased. Undone moves and results stay in **History**, crossed out, and History shows how
+    many times the host used undo.
+  - Every player sees a message saying what the host undid.
+  - Only the current round (or hand) can be undone. Once the next one starts, earlier results are final.
+    For a misdeal, use **Cancel round** instead.
+  - The host is shown exactly what will be reversed and has to confirm.
 - **Play for someone**: players without a phone can be added from the menu, and the host plays their moves.
   The host also gets the controls automatically when a player's phone is offline, and can take over any
   turn with **Play for …**.

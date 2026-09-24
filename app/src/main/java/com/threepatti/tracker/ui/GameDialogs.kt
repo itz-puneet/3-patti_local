@@ -21,6 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,6 +110,20 @@ fun GameDialogs(
             },
             onDismiss = onDismiss,
         )
+        GameDialog.ConfirmUndo -> {
+            val nextUndo by session.nextUndo.collectAsState()
+            ConfirmDialog(
+                title = "Undo the last move?",
+                text = "\"${nextUndo ?: "The last change"}\" will be reversed. Everyone at the table is told, " +
+                    "and it stays in the history, crossed out. Earlier ${state.roundWord}s can't be undone.",
+                confirmLabel = "Undo",
+                onConfirm = {
+                    session.undo()
+                    onDismiss()
+                },
+                onDismiss = onDismiss,
+            )
+        }
         GameDialog.LeaveTable -> ConfirmDialog(
             title = "Leave the table?",
             text = "Your seat and chips stay with the host. Join again from this phone to get them back.",

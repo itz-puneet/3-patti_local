@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.threepatti.core.GameState
+import com.threepatti.core.LogKind
 import com.threepatti.core.RoundPhase
 import com.threepatti.core.net.ConnectionStatus
 import kotlinx.coroutines.launch
@@ -56,6 +57,7 @@ sealed interface GameDialog {
     data object CancelRound : GameDialog
     data object CloseTable : GameDialog
     data object LeaveTable : GameDialog
+    data object ConfirmUndo : GameDialog
     data class PlayerMenu(val playerId: String) : GameDialog
     data class Chips(val playerId: String) : GameDialog
     data class Rename(val playerId: String) : GameDialog
@@ -76,6 +78,20 @@ fun GameScreen(session: TableSession, onExit: () -> Unit) {
         session.messages.collect { message ->
             snackbar.currentSnackbarData?.dismiss()
             launch { snackbar.showSnackbar(message) }
+        }
+    }
+
+    // Tell players whenever the host uses undo, so nothing changes behind anyone's back.
+    var lastSeenSeq by remember(session) { mutableStateOf<Long?>(null) }
+    val newestSeq = state?.log?.lastOrNull()?.seq
+    LaunchedEffect(newestSeq) {
+        val log = state?.log ?: return@LaunchedEffect
+        val seen = lastSeenSeq
+        lastSeenSeq = newestSeq
+        if (seen == null || session.isHost) return@LaunchedEffect
+        log.lastOrNull { it.seq > seen && it.kind == LogKind.UNDO }?.let {
+            snackbar.currentSnackbarData?.dismiss()
+            snackbar.showSnackbar(it.text, withDismissAction = true)
         }
     }
 
@@ -119,7 +135,7 @@ private fun GameContent(
                 isHost = session.isHost,
                 connection = connection,
                 canUndo = canUndo,
-                onUndo = session::undo,
+                onUndo = { dialog = GameDialog.ConfirmUndo },
                 onOpen = { dialog = it },
             )
         },

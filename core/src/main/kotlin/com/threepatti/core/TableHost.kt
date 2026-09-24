@@ -31,6 +31,10 @@ class TableHost(
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
 
+    /** What the next undo would reverse, to show the host before they confirm. */
+    private val _nextUndo = MutableStateFlow<String?>(null)
+    val nextUndo: StateFlow<String?> = _nextUndo.asStateFlow()
+
     val hostPlayerId: String = snapshot.state.players.first { it.isHost }.id
 
     /** Applies [action] and returns an error message when it is not allowed. */
@@ -42,10 +46,15 @@ class TableHost(
             } catch (e: GameRuleException) {
                 return e.message ?: "That move is not allowed"
             }
-            val lastSeq = before.log.lastOrNull()?.seq ?: 0
-            val text = after.log.firstOrNull { it.seq > lastSeq }?.text
-            undoStack.addLast(UndoEntry(before, text))
-            while (undoStack.size > MAX_UNDO) undoStack.removeFirst()
+            if (action == GameAction.StartRound) {
+                // A started round locks everything before it. A misdeal is handled with Cancel round instead.
+                undoStack.clear()
+            } else {
+                val lastSeq = before.log.lastOrNull()?.seq ?: 0
+                val text = after.log.firstOrNull { it.seq > lastSeq }?.text
+                undoStack.addLast(UndoEntry(before, text))
+                while (undoStack.size > MAX_UNDO) undoStack.removeFirst()
+            }
             publish(after)
             return null
         }
@@ -53,7 +62,12 @@ class TableHost(
 
     fun undo(): String? {
         synchronized(lock) {
-            val previous = undoStack.removeLastOrNull() ?: return "Nothing to undo"
+            val previous = undoStack.removeLastOrNull()
+                ?: return if (_state.value.round != null) {
+                    "Nothing to undo. Once a ${_state.value.roundWord} starts, earlier ${_state.value.roundWord}s are final"
+                } else {
+                    "Nothing to undo"
+                }
             publish(GameEngine.restoreForUndo(previous.state, _state.value, previous.text))
             return null
         }
@@ -103,6 +117,7 @@ class TableHost(
     private fun publish(next: GameState) {
         _state.value = next
         _canUndo.value = undoStack.isNotEmpty()
+        _nextUndo.value = undoStack.lastOrNull()?.let { it.text ?: "the last change" }
         onSnapshot(HostSnapshot(next, devices))
     }
 

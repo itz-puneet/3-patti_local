@@ -12,7 +12,7 @@ internal object PokerEngine {
         if (eligible.size < 2) fail("Need at least 2 players with chips to deal a hand")
         val eligibleIds = eligible.map { it.id }.toSet()
         val dealerId = nextDealer(state.players, state.lastDealerId, eligibleIds)
-        val number = state.results.size + 1
+        val number = state.nextRoundNumber
         val draft = Round(
             number = number,
             dealerId = dealerId,

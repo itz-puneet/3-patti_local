@@ -26,7 +26,7 @@ import com.threepatti.core.GameAction.UpdateSettings
  * [GameRuleException] with a message that can be shown to the player.
  */
 object GameEngine {
-    const val MAX_LOG = 200
+    const val MAX_LOG = 1000
     const val MAX_NAME_LENGTH = 20
     const val MAX_TABLE_NAME_LENGTH = 40
 
@@ -69,7 +69,7 @@ object GameEngine {
     fun claimSeat(state: GameState, playerId: String, onBrowser: Boolean): GameState {
         val player = state.player(playerId) ?: return state
         return state.updatePlayer(playerId) { it.copy(hasDevice = true, onBrowser = onBrowser) }
-            .withLog("${player.name} now plays from their own ${if (onBrowser) "browser" else "phone"}")
+            .withLog("${player.name} now plays from their own ${if (onBrowser) "browser" else "phone"}", LogKind.SEAT)
             .bumped()
     }
 
@@ -88,7 +88,8 @@ object GameEngine {
 
     /**
      * Goes back to [previous] after the host pressed undo, while keeping what undo must not
-     * change: who is online, and players whose phones joined after that point.
+     * change: who is online, players whose phones joined after that point, and the history.
+     * Nothing is erased from the log or the round results: undone lines are only marked as undone.
      */
     fun restoreForUndo(previous: GameState, current: GameState, undoneText: String?): GameState {
         val currentById = current.players.associateBy { it.id }
@@ -106,11 +107,18 @@ object GameEngine {
         val joinedSince = current.players
             .filter { it.id !in knownIds && it.hasDevice }
             .map { it.copy(balance = start, buyIn = start, sittingOut = false) }
+        val lastSeq = previous.log.lastOrNull()?.seq ?: 0
+        val log = current.log.map { if (it.seq > lastSeq && it.kind == LogKind.MOVE) it.copy(undone = true) else it }
+        // Results are only ever appended, so everything past the old list is what's being undone.
+        val results = current.results.mapIndexed { i, r -> if (i >= previous.results.size) r.copy(undone = true) else r }
         return previous.copy(
             players = restored + joinedSince,
+            log = log,
+            results = results,
+            undoCount = current.undoCount + 1,
             nextPlayerNumber = maxOf(previous.nextPlayerNumber, current.nextPlayerNumber),
             version = current.version + 1,
-        ).withLog(if (undoneText != null) "Host undid: $undoneText" else "Host undid the last action")
+        ).withLog(if (undoneText != null) "Host undid: $undoneText" else "Host undid the last change", LogKind.UNDO)
     }
 
     fun apply(state: GameState, action: GameAction, actor: Actor = Actor.Host): GameState {
@@ -165,7 +173,7 @@ object GameEngine {
         val eligibleIds = eligible.map { it.id }.toSet()
         val dealerId = nextDealer(state.players, state.lastDealerId, eligibleIds)
         val hands = eligible.map { Hand(playerId = it.id, status = HandStatus.BLIND, invested = boot) }
-        val number = state.results.size + 1
+        val number = state.nextRoundNumber
         val draft = Round(
             number = number,
             dealerId = dealerId,
@@ -392,7 +400,10 @@ object GameEngine {
             connected = false,
         )
         val next = state.copy(players = state.players + player, nextPlayerNumber = number + 1)
-            .withLog(if (hasDevice) "$name joined the table" else "$name was seated by the host")
+            .withLog(
+                if (hasDevice) "$name joined the table" else "$name was seated by the host",
+                if (hasDevice) LogKind.SEAT else LogKind.MOVE,
+            )
         return next to id
     }
 
