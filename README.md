@@ -65,8 +65,10 @@ separate app, so it can sit next to the APK, and both play at the same table.
 
 ## Your cards (3 Patti)
 
-After **See cards** the app offers to take your 3 cards (switch that off in **⋮ → Enter my cards after See
-cards**, and enter them later from the panel). Entering them is optional and helps settle arguments:
+After **See cards** the app opens the card picker (switch that off in **⋮ → Enter my cards after See
+cards**, and enter them later from the panel). All 52 cards are on one screen, so each card is one tap;
+tap a card again to take it back. The same picker is used by **Decide winner**. Entering your cards is
+optional and helps settle arguments:
 
 - Only you see them. Your phone shows them next to your buttons; the host's screen doesn't show them.
 - In a **side show** the two players see each other's cards and the app's verdict. Everyone else only

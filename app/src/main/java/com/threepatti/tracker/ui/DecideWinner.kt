@@ -1,6 +1,7 @@
 package com.threepatti.tracker.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,6 +18,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -33,6 +36,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,8 +44,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -93,6 +103,7 @@ fun DecideWinnerDialog(
  * show or side show. With [onDeclare] (the host, during a show) the result can be entered straight away.
  * It starts with the cards players entered themselves, where this phone can see them, and the table's variant.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun DecideWinnerContent(
     title: String,
@@ -111,12 +122,8 @@ fun DecideWinnerContent(
     val rules = HandRules.of(variant, jokerRanks)
     var hands by remember { mutableStateOf(seats) }
     var cards by remember { mutableStateOf(seats.associate { it.key to (initialCards[it.key] ?: List(3) { null }) }) }
-    var slot by remember { mutableStateOf(firstEmpty(seats, cards) ?: (0 to 0)) }
-
-    val selectedKey = hands.getOrNull(slot.first)?.key
-    // Cards on the table, except the one in the selected slot, which can be swapped.
-    val used = cards.flatMap { (key, list) -> list.filterIndexed { i, card -> card != null && !(key == selectedKey && i == slot.second) } }
-        .filterNotNull().toSet()
+    // Where the next card goes: a hand and a card in it. Null once every card is in.
+    var slot by remember { mutableStateOf(firstEmpty(seats, cards)) }
     val complete = hands.all { seat -> cards.getValue(seat.key).all { it != null } }
     // Jokers are tried as every card, so work the hands out only when something changes.
     val verdict: Result<Verdict<String>>? = remember(hands, cards, rules) {
@@ -134,11 +141,24 @@ fun DecideWinnerContent(
     }
     val winners = verdict?.getOrNull()?.winners.orEmpty()
 
-    fun place(card: Card) {
-        val key = selectedKey ?: return
-        cards = cards + (key to cards.getValue(key).toMutableList().also { it[slot.second] = card })
-        firstEmpty(hands, cards)?.let { slot = it }
+    fun pick(card: Card) {
+        // A card that's already in a hand comes back out, so a wrong tap is undone by tapping it again.
+        val owner = hands.indexOfFirst { card in cards.getValue(it.key) }
+        if (owner >= 0) {
+            val key = hands[owner].key
+            val index = cards.getValue(key).indexOf(card)
+            cards = cards + (key to cards.getValue(key).toMutableList().also { it[index] = null })
+            slot = owner to index
+            return
+        }
+        val (hand, index) = slot ?: return
+        val key = hands[hand].key
+        cards = cards + (key to cards.getValue(key).toMutableList().also { it[index] = card })
+        slot = firstEmpty(hands, cards)
     }
+    // Keep the hand the next card goes into in sight above the cards.
+    val nextHand = remember { BringIntoViewRequester() }
+    LaunchedEffect(slot?.first) { if (slot != null) nextHand.bringIntoView() }
 
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -149,7 +169,7 @@ fun DecideWinnerContent(
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Hint("Tap a card, then pick its rank and suit. The app ranks the hands by 3 Patti rules.")
+            Hint("Tap each hand's 3 cards below. The app ranks the hands by 3 Patti rules.")
             VariantPicker(variant = variant, jokerRanks = jokerRanks, onVariant = { variant = it }, onJokerRanks = { jokerRanks = it })
             hands.forEachIndexed { index, seat ->
                 val list = cards.getValue(seat.key)
@@ -160,7 +180,9 @@ fun DecideWinnerContent(
                         containerColor = if (won) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
                     ),
                     border = if (won) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().then(
+                        if (slot?.first == index) Modifier.bringIntoViewRequester(nextHand) else Modifier,
+                    ),
                 ) {
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -186,7 +208,7 @@ fun DecideWinnerContent(
                             IconButton(onClick = {
                                 hands = hands - seat
                                 cards = cards - seat.key
-                                slot = firstEmpty(hands, cards) ?: (0 to 0)
+                                slot = firstEmpty(hands, cards)
                             }) { Icon(Icons.Filled.Close, contentDescription = "Remove ${seat.label}") }
                         }
                     }
@@ -198,23 +220,26 @@ fun DecideWinnerContent(
                     val seat = HandSeat("hand$number", "Hand $number")
                     hands = hands + seat
                     cards = cards + (seat.key to List(3) { null })
-                    slot = firstEmpty(hands, cards) ?: (hands.lastIndex to 0)
+                    slot = firstEmpty(hands, cards)
                 }) { Text("Add a hand") }
             }
             VerdictCard(hands, verdict, rules.lowestWins)
         }
         Surface(color = MaterialTheme.colorScheme.surfaceContainer, shadowElevation = 8.dp) {
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CardKeyboard(
-                    used = used,
-                    slotKey = slot,
-                    onCard = ::place,
-                    onClear = {
-                        val key = selectedKey
-                        if (key != null) cards = cards + (key to cards.getValue(key).toMutableList().also { it[slot.second] = null })
-                    },
-                    canClear = selectedKey != null && cards[selectedKey]?.getOrNull(slot.second) != null,
-                )
+                val next = slot
+                if (next == null) {
+                    // Every card is in: the cards make way for the hands and the verdict.
+                    Hint("Every card is in. Tap a card above to change it.", center = true, modifier = Modifier.fillMaxWidth())
+                } else {
+                    Hint("Tap ${hands[next.first].label}'s ${ordinal(next.second)} card", center = true, modifier = Modifier.fillMaxWidth())
+                    CardGrid(
+                        picked = cards.values.flatten().filterNotNull().toSet(),
+                        wildRanks = rules.wildRanks,
+                        onTap = ::pick,
+                        cellHeight = 40.dp,
+                    )
+                }
                 if (onDeclare != null) {
                     Button(
                         onClick = { onDeclare(winners) },
@@ -228,61 +253,87 @@ fun DecideWinnerContent(
 }
 
 /**
- * Rank and suit keys to enter one card: tap a rank and a suit, in either order. Cards in [used] are taken
- * and can't be picked. A half-picked card is forgotten when [slotKey] changes.
+ * All 52 cards, a row for each rank with its 4 suits: aces to 8s on the left, 7s to 2s on the right. One
+ * tap enters a card. Cards already entered ([picked]) are highlighted; tapping one takes it back out.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun CardKeyboard(
-    used: Set<Card>,
-    slotKey: Any?,
-    onCard: (Card) -> Unit,
-    onClear: (() -> Unit)? = null,
-    canClear: Boolean = false,
+internal fun CardGrid(
+    picked: Set<Card>,
+    wildRanks: Set<Int>,
+    onTap: (Card) -> Unit,
+    modifier: Modifier = Modifier,
+    cellHeight: Dp = 44.dp,
 ) {
-    var rank by remember(slotKey) { mutableStateOf<Int?>(null) }
-    var suit by remember(slotKey) { mutableStateOf<Suit?>(null) }
-    fun pick(card: Card) {
-        rank = null
-        suit = null
-        onCard(card)
-    }
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        (14 downTo 2).forEach { r ->
-            val free = Suit.entries.any { Card(r, it) !in used } && (suit == null || Card(r, suit!!) !in used)
-            PickerKey(rankLabel(r), selected = rank == r, enabled = free, color = null) {
-                val chosenSuit = suit
-                if (chosenSuit != null) pick(Card(r, chosenSuit)) else rank = if (rank == r) null else r
+    val haptics = LocalHapticFeedback.current
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        listOf(14 downTo 8, 7 downTo 2).forEach { ranks ->
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                ranks.forEach { rank ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Suit.entries.forEach { suit ->
+                            val card = Card(rank, suit)
+                            GridCard(card, card in picked, rank in wildRanks, Modifier.weight(1f).height(cellHeight)) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onTap(card)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
+}
+
+@Composable
+private fun GridCard(card: Card, picked: Boolean, wild: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(8.dp)
+    // A lighter red on a dark screen, so hearts and diamonds stay easy to read.
+    val red = if (colors.surface.luminance() < 0.5f) Color(0xFFFF8A80) else RedSuit
+    val ink = when {
+        picked -> colors.onSecondary
+        card.suit.red -> red
+        else -> colors.onSurface
+    }
+    Box(
+        modifier
+            .clip(shape)
+            .background(if (picked) colors.secondary else colors.surface)
+            .border(1.dp, if (picked) colors.secondary else colors.outlineVariant, shape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = spokenCard(card) + if (picked) ", entered" else "" },
+        contentAlignment = Alignment.Center,
     ) {
-        Suit.entries.forEach { s ->
-            val free = rank?.let { Card(it, s) !in used } ?: true
-            PickerKey(s.symbol, selected = suit == s, enabled = free, color = if (s.red) RedSuit else BlackSuit, wide = true) {
-                val chosenRank = rank
-                if (chosenRank != null) pick(Card(chosenRank, s)) else suit = if (suit == s) null else s
-            }
-        }
-        if (onClear != null) {
-            TextButton(
-                onClick = {
-                    rank = null
-                    suit = null
-                    onClear()
-                },
-                enabled = canClear,
-            ) { Text("Clear") }
+        Text(rankLabel(card.rank) + card.suit.symbol, color = ink, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, softWrap = false)
+        if (wild) {
+            Text(
+                "★",
+                color = if (picked) colors.onSecondary else JokerMark,
+                fontSize = 9.sp,
+                lineHeight = 9.sp,
+                modifier = Modifier.align(Alignment.TopEnd).padding(top = 1.dp, end = 2.dp),
+            )
         }
     }
+}
+
+/** Such as "Ace of spades", for screen readers. */
+private fun spokenCard(card: Card): String {
+    val rank = when (card.rank) {
+        14 -> "Ace"
+        13 -> "King"
+        12 -> "Queen"
+        11 -> "Jack"
+        else -> card.rank.toString()
+    }
+    return "$rank of ${card.suit.name.lowercase()}"
+}
+
+/** "1st", "2nd" or "3rd" card of a hand, from its index. */
+internal fun ordinal(index: Int): String = when (index) {
+    0 -> "1st"
+    1 -> "2nd"
+    else -> "3rd"
 }
 
 @OptIn(ExperimentalLayoutApi::class)

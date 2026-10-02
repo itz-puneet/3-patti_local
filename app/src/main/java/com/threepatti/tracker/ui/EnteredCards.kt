@@ -2,21 +2,27 @@ package com.threepatti.tracker.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -24,7 +30,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -34,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.threepatti.core.Card
 import com.threepatti.core.GameState
@@ -55,8 +61,8 @@ internal fun GameState.entersCardsFor(playerId: String, myId: String, isHost: Bo
     playerId == myId || (isHost && player(playerId)?.hasDevice == false)
 
 /**
- * The 3 cards a player entered, or the card picker to enter them. Only that player's phone shows them
- * until a side show or show.
+ * The card picker for a player's own 3 cards, full screen: one tap per card. Only that player's phone
+ * shows them until a side show or show.
  */
 @Composable
 fun MyCardsDialog(
@@ -68,44 +74,91 @@ fun MyCardsDialog(
     onSave: (List<Card>) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+            MyCardsContent(title, hint, initial, rules, dismissLabel, onSave, onDismiss)
+        }
+    }
+}
+
+@Composable
+fun MyCardsContent(
+    title: String,
+    hint: String,
+    initial: List<Card>?,
+    rules: HandRules,
+    dismissLabel: String,
+    onSave: (List<Card>) -> Unit,
+    onDismiss: () -> Unit,
+) {
     var cards by remember { mutableStateOf<List<Card?>>(initial ?: List(3) { null }) }
-    var slot by remember { mutableIntStateOf(0) }
-    val used = cards.filterIndexed { i, card -> card != null && i != slot }.filterNotNull().toSet()
+    // The card the next tap fills. Null once all 3 are in.
+    var slot by remember { mutableStateOf(cards.indexOfFirst { it == null }.takeIf { it >= 0 }) }
     val complete = cards.all { it != null }
     val hand = remember(cards, rules) {
         if (complete) runCatching { TeenPatti.best(cards.filterNotNull(), rules) }.getOrNull() else null
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier.padding(horizontal = 16.dp),
-        title = { Text(title) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Hint(hint)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
-                    cards.forEachIndexed { i, card ->
-                        CardSlot(card, wild = card != null && card.rank in rules.wildRanks, selected = slot == i) { slot = i }
+    fun pick(card: Card) {
+        // Tapping a card that's in already takes it back out.
+        val at = cards.indexOf(card)
+        if (at >= 0) {
+            cards = cards.toMutableList().also { it[at] = null }
+            slot = at
+            return
+        }
+        val index = slot ?: return
+        cards = cards.toMutableList().also { it[index] = card }
+        slot = cards.indexOfFirst { it == null }.takeIf { it >= 0 }
+    }
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+            IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = dismissLabel) }
+        }
+        BoxWithConstraints(Modifier.weight(1f)) {
+            // The cards sit at the bottom, within reach of a thumb; on a small screen everything scrolls.
+            Column(
+                Modifier
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Hint(hint)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
+                        cards.forEachIndexed { i, card ->
+                            CardSlot(card, wild = card != null && card.rank in rules.wildRanks, selected = slot == i) { slot = i }
+                        }
                     }
+                    Text(
+                        hand?.name ?: slot?.let { "Tap the ${ordinal(it)} card" }.orEmpty(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (hand != null) FontWeight.Bold else null,
+                        color = if (hand != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
-                Text(
-                    hand?.name ?: "Tap a card, then pick its rank and suit",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (hand != null) FontWeight.SemiBold else null,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                CardGrid(
+                    picked = cards.filterNotNull().toSet(),
+                    wildRanks = rules.wildRanks,
+                    onTap = ::pick,
+                    modifier = Modifier.padding(top = 16.dp),
                 )
-                CardKeyboard(used = used, slotKey = slot, onCard = { card ->
-                    cards = cards.toMutableList().also { it[slot] = card }
-                    cards.indexOfFirst { it == null }.takeIf { it >= 0 }?.let { slot = it }
-                })
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(cards.filterNotNull()) }, enabled = complete) { Text("Save") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(dismissLabel) } },
-    )
+        }
+        Surface(color = MaterialTheme.colorScheme.surfaceContainer, shadowElevation = 8.dp) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onDismiss, modifier = Modifier.weight(1f).height(52.dp)) { Text(dismissLabel) }
+                Button(
+                    onClick = { onSave(cards.filterNotNull()) },
+                    enabled = complete,
+                    modifier = Modifier.weight(2f).height(52.dp),
+                ) { Text(if (complete) "Save" else "Tap ${cards.count { it == null }} more") }
+            }
+        }
+    }
 }
 
 /**

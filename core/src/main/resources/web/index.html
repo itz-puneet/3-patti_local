@@ -165,7 +165,11 @@ h2 { font-size: 17px; margin: 8px 0 0; }
 .log.neg { color: var(--error); }
 
 /* Decide winner */
-.dialog.wide { max-width: 520px; max-height: calc(100dvh - 32px); overflow-y: auto; gap: 10px; padding: 18px; }
+.dialog.wide { max-width: 520px; max-height: calc(100dvh - 16px); overflow-y: auto; gap: 10px; padding: 14px; }
+.scrim.full { padding: 8px; }
+.dhead { display: flex; align-items: center; gap: 8px; }
+.dhead h3 { flex: 1; }
+.dhead .x { background: transparent; color: var(--muted); font-size: 20px; padding: 4px 8px; }
 .hand { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 12px; padding: 8px 10px; }
 .hand.won { background: var(--primary-c); color: var(--on-primary-c); box-shadow: inset 0 0 0 2px var(--primary); }
 .hand .hl { flex: 1; min-width: 0; }
@@ -175,15 +179,25 @@ h2 { font-size: 17px; margin: 8px 0 0; }
 .slot { width: 38px; height: 52px; padding: 0; border-radius: 6px; background: #fff; color: #1B1B1B; border: 1px solid var(--outline);
   font-weight: 700; line-height: 1.1; }
 .slot.empty { background: var(--variant); color: var(--muted); }
-.slot.red, .key.red { color: #C62828; }
+.slot.red { color: #C62828; }
 .slot.sel { box-shadow: 0 0 0 3px var(--secondary); }
 .slot { position: relative; }
 .slot .star { position: absolute; top: 1px; right: 3px; font-size: 10px; color: #C58B00; }
 .keys { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; }
 .key { min-width: 38px; height: 42px; border-radius: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--outline); font-weight: 700; }
-.key.suit { min-width: 52px; font-size: 22px; }
 .key.on { background: var(--secondary-c); border: 2px solid var(--secondary); }
 .key.plain { border: 0; background: transparent; color: var(--primary); font-weight: 600; }
+/* All 52 cards: one tap enters a card */
+.cgrid { display: flex; gap: 10px; }
+.cgrid .blk { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.cgrid .gr { display: flex; gap: 4px; }
+.gc { position: relative; flex: 1; min-width: 0; height: 44px; padding: 0; border-radius: 8px; border: 1px solid var(--outline);
+  background: var(--bg); color: var(--text); font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; }
+.gc.red { color: #C62828; }
+.gc.on { background: var(--secondary); color: var(--on-secondary); border-color: var(--secondary); }
+.gc .star { position: absolute; top: 1px; right: 3px; font-size: 9px; color: #C58B00; }
+.gc.on .star { color: var(--on-secondary); }
+@media (prefers-color-scheme: dark) { .gc.red:not(.on) { color: #FF8A80; } }
 .verdict { border-radius: 12px; padding: 12px; background: var(--variant); }
 .verdict.done { background: var(--primary); color: var(--on-primary); }
 .verdict.err { background: var(--error-c); color: var(--on-error-c); }
@@ -372,6 +386,12 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     }).catch(function () {
       showToast("Couldn't reach the host");
     }).then(function () { busy = false; render(); });
+  }
+
+  // Sends once the move on its way has been answered, for moves that must not be dropped, such as entered cards.
+  function sendWhenFree(action) {
+    if (busy) { setTimeout(function () { sendWhenFree(action); }, 200); return; }
+    send(action);
   }
 
   function heartbeat() {
@@ -814,14 +834,14 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   function openDecide(title, labels, asker, canAdd, cards) {
     var set = data.state.settings;
     var d = {
-      kind: "decide", title: title, labels: labels, asker: asker, canAdd: canAdd, slot: [0, 0], rank: null, suit: null,
+      kind: "decide", title: title, labels: labels, asker: asker, canAdd: canAdd, slot: null,
       variant: set.variant || "CLASSIC", jokers: (set.jokerRanks || []).slice(),
       cards: labels.map(function (l, i) {
         var codes = cards && cards[i];
         return codes && codes.length === 3 ? codes.map(parseCard) : [null, null, null];
       }), result: null, asked: 0
     };
-    d.slot = firstEmpty(d) || [0, 0];
+    d.slot = firstEmpty(d);
     openDialog(d);
     if (d.cards.some(function (h) { return h.some(Boolean); })) askVerdict(d);
   }
@@ -831,60 +851,74 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     var r = data.state.round, h = handOf(r, data.playerId);
     if (!h) return;
     var d = {
-      kind: "mycards", round: r.number, afterSeeing: afterSeeing, labels: ["You"], slot: [0, 0], rank: null, suit: null,
+      kind: "mycards", round: r.number, afterSeeing: afterSeeing, labels: ["You"], slot: null,
       variant: data.state.settings.variant, jokers: (data.state.settings.jokerRanks || []).slice(), asker: null,
       cards: [h.cards.length === 3 ? h.cards.map(parseCard) : [null, null, null]], result: null, asked: 0
     };
+    d.slot = firstEmpty(d);
     openDialog(d);
     if (h.cards.length === 3) askVerdict(d);
   }
 
   function myCardsBody(d) {
     var res = d.result || {}, hand = d.cards[0], complete = hand.every(Boolean), named = complete && res.names && res.names[0];
-    var html = "<h3>Your cards</h3><div class=\"small muted\">Only you can see them. In a side show the other player sees them, " +
-      "and at a show everyone does. The app then works out who won and the host confirms. Shown cards can't be changed.</div>" +
+    var missing = hand.filter(function (c) { return !c; }).length;
+    return '<div class="dhead"><h3>Your cards</h3><button class="x" data-act="close" aria-label="Close">✕</button></div>' +
+      '<div class="small muted">Only you see these until a side show or show. Tap a card again to take it back.</div>' +
       '<div class="slots mid">' + slotsHtml(d, 0, wildRanks(d)) + "</div>" +
-      '<div class="center' + (named ? " bold" : " small muted") + '">' + (named ? esc(named) : "Tap a card, then pick its rank and suit") + "</div>";
-    return html + keysHtml(d, false) + '<div class="actions"><button data-act="close">' + (d.afterSeeing ? "Skip" : "Cancel") +
-      '</button><button data-act="savecards"' + (complete ? "" : " disabled") + ">Save</button></div>";
+      '<div class="center' + (named ? " bold" : " muted") + '">' + esc(named || nextCardText(d)) + "</div>" + gridHtml(d) +
+      // Not btn(): these only close the picker, so they work while a move is on its way to the host.
+      '<div class="row"><button class="btn line" data-act="close">' + (d.afterSeeing ? "Skip" : "Cancel") + "</button>" +
+      '<button class="btn" data-act="savecards" style="flex:2"' + (complete ? "" : " disabled") + ">" +
+      (complete ? "Save" : "Tap " + missing + " more") + "</button></div>";
   }
 
   function slotsHtml(d, i, wild) {
     return d.cards[i].map(function (c, j) {
-      var sel = d.slot[0] === i && d.slot[1] === j;
+      var sel = d.slot && d.slot[0] === i && d.slot[1] === j;
       return '<button class="slot' + (c ? (isRed(c.s) ? " red" : "") : " empty") + (sel ? " sel" : "") +
         '" data-act="slot" data-i="' + i + '" data-j="' + j + '">' +
         (c ? rankText(c.r) + "<br>" + suitSymbol(c.s) + (wild.indexOf(c.r) >= 0 ? '<span class="star">★</span>' : "") : "?") + "</button>";
     }).join("");
   }
 
-  // Rank and suit keys: tap a rank and a suit, in either order. Cards already entered can't be picked.
-  function keysHtml(d, canClear) {
-    var used = usedCards(d), html = '<div class="keys">';
-    for (var r = 14; r >= 2; r--) {
-      var free = SUITS.some(function (x) { return !used[rankText(r) + x[0]]; }) && (!d.suit || !used[rankText(r) + d.suit]);
-      html += '<button class="key' + (d.rank === r ? " on" : "") + '" data-act="rank" data-r="' + r + '"' + (free ? "" : " disabled") + ">" + rankText(r) + "</button>";
+  // All 52 cards, a row for each rank with its 4 suits: aces to 8s on the left, 7s to 2s on the right.
+  // One tap enters a card; entered cards are highlighted.
+  function gridHtml(d) {
+    var picked = {}, wild = wildRanks(d);
+    d.cards.forEach(function (h) { h.forEach(function (c) { if (c) picked[cardCode(c)] = true; }); });
+    function block(from, to) {
+      var html = '<div class="blk">';
+      for (var r = from; r >= to; r--) {
+        html += '<div class="gr">' + SUITS.map(function (x) {
+          var code = rankText(r) + x[0];
+          return '<button class="gc' + (isRed(x[0]) ? " red" : "") + (picked[code] ? " on" : "") + '" data-act="pick" data-c="' + code + '">' +
+            rankText(r) + x[1] + (wild.indexOf(r) >= 0 ? '<span class="star">★</span>' : "") + "</button>";
+        }).join("") + "</div>";
+      }
+      return html + "</div>";
     }
-    html += '</div><div class="keys">';
-    SUITS.forEach(function (x) {
-      var free = !d.rank || !used[rankText(d.rank) + x[0]];
-      html += '<button class="key suit' + (isRed(x[0]) ? " red" : "") + (d.suit === x[0] ? " on" : "") + '" data-act="suit" data-s="' + x[0] + '"' +
-        (free ? "" : " disabled") + ">" + x[1] + "</button>";
-    });
-    if (canClear) {
-      var current = d.cards[d.slot[0]] && d.cards[d.slot[0]][d.slot[1]];
-      html += '<button class="key plain" data-act="clearcard"' + (current ? "" : " disabled") + ">Clear</button>";
-    }
-    return html + "</div>";
+    return '<div class="cgrid">' + block(14, 8) + block(7, 2) + "</div>";
   }
 
-  // Cards on the table, except the one in the selected slot, which can be swapped.
-  function usedCards(d) {
-    var used = {};
-    d.cards.forEach(function (hand, i) {
-      hand.forEach(function (c, j) { if (c && !(i === d.slot[0] && j === d.slot[1])) used[cardCode(c)] = true; });
-    });
-    return used;
+  // Tapping a card that's already entered takes it back out, so a wrong tap is undone by tapping it again.
+  function pickCard(d, code) {
+    for (var i = 0; i < d.cards.length; i++) {
+      for (var j = 0; j < 3; j++) {
+        var c = d.cards[i][j];
+        if (c && cardCode(c) === code) { d.cards[i][j] = null; d.slot = [i, j]; askVerdict(d); return; }
+      }
+    }
+    if (!d.slot) return;
+    d.cards[d.slot[0]][d.slot[1]] = parseCard(code);
+    d.slot = firstEmpty(d);
+    askVerdict(d);
+  }
+
+  function nextCardText(d) {
+    if (!d.slot) return "Every card is in. Tap one to take it back.";
+    var nth = ["1st", "2nd", "3rd"][d.slot[1]];
+    return d.kind === "mycards" ? "Tap the " + nth + " card" : "Tap " + d.labels[d.slot[0]] + "'s " + nth + " card";
   }
 
   function firstEmpty(d) {
@@ -893,13 +927,6 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       if (j >= 0) return [i, j];
     }
     return null;
-  }
-
-  function placeCard(d, card) {
-    d.cards[d.slot[0]][d.slot[1]] = card;
-    d.rank = null; d.suit = null;
-    d.slot = firstEmpty(d) || d.slot;
-    askVerdict(d);
   }
 
   function askVerdict(d) {
@@ -917,7 +944,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
 
   function decideBody(d) {
     var res = d.result || {}, names = res.names || [], winners = res.winners || [];
-    var html = "<h3>" + esc(d.title) + '</h3><div class="small muted">Tap a card, then pick its rank and suit. ' +
+    var html = "<h3>" + esc(d.title) + '</h3><div class="small muted">Tap each hand\'s 3 cards below. ' +
       "The app ranks the hands by 3 Patti rules.</div>";
     var variant = VARIANTS.filter(function (v) { return v[0] === d.variant; })[0] || VARIANTS[0], wild = wildRanks(d);
     html += '<div class="seg">' + VARIANTS.map(function (v) {
@@ -948,7 +975,10 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         esc(who.length > 1 ? who.join(" and ") + " tie" : d.variant === "MUFLIS" ? who[0] + " wins with the lowest hand" : who[0] + " wins") +
         "</div><div>" + esc(names[winners[0]]) + "</div>" + (res.note ? '<div class="small">' + esc(res.note) + "</div>" : "") + "</div>";
     } else html += '<div class="verdict muted">Enter every card to see who wins.</div>';
-    return html + keysHtml(d, true) + '<div class="actions"><button data-act="close">Close</button></div>';
+    // Once every card is in, the cards make way for the hands and the verdict; tapping a card in a hand brings them back.
+    html += d.slot ? '<div class="small muted center">' + esc(nextCardText(d)) + "</div>" + gridHtml(d) :
+      '<div class="small muted center">Every card is in. Tap a card above to change it.</div>';
+    return html + '<div class="actions"><button data-act="close">Close</button></div>';
   }
 
   function pokerActions(u) {
@@ -1064,7 +1094,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
             " is a joker and stands for whatever card makes the best hand." }[set.variant] || "") + "</div>") +
         '<div class="sig">Made by Afler</div><div class="actions"><button data-act="close">OK</button></div>';
     }
-    overlay.innerHTML = '<div class="scrim" data-act="scrim"><div class="dialog' + (dialog.kind === "decide" || dialog.kind === "mycards" ? " wide" : "") + '">' +
+    var picker = dialog.kind === "decide" || dialog.kind === "mycards";
+    overlay.innerHTML = '<div class="scrim' + (picker ? " full" : "") + '" data-act="scrim"><div class="dialog' + (picker ? " wide" : "") + '">' +
       body + "</div></div>";
     var input = document.getElementById("newName");
     if (input) input.focus();
@@ -1104,7 +1135,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       case "savecards":
         var picked = dialog.cards[0];
         closeDialog();
-        send({ type: "enter_cards", playerId: me, cards: picked.map(cardCode) });
+        sendWhenFree({ type: "enter_cards", playerId: me, cards: picked.map(cardCode) });
         break;
       case "askcards": askCards = !askCards; store.set("askCards", askCards ? "on" : "off"); renderDialog(); break;
       case "show": send({ type: "show", playerId: me }); break;
@@ -1165,16 +1196,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         if (at >= 0) dialog.jokers.splice(at, 1); else dialog.jokers.push(jr);
         askVerdict(dialog);
         break;
-      case "slot": dialog.slot = [+el.getAttribute("data-i"), +el.getAttribute("data-j")]; dialog.rank = null; dialog.suit = null; renderDialog(); break;
-      case "rank":
-        var rk = +el.getAttribute("data-r");
-        if (dialog.suit) placeCard(dialog, { r: rk, s: dialog.suit }); else { dialog.rank = dialog.rank === rk ? null : rk; renderDialog(); }
-        break;
-      case "suit":
-        var su = el.getAttribute("data-s");
-        if (dialog.rank) placeCard(dialog, { r: dialog.rank, s: su }); else { dialog.suit = dialog.suit === su ? null : su; renderDialog(); }
-        break;
-      case "clearcard": dialog.cards[dialog.slot[0]][dialog.slot[1]] = null; dialog.rank = null; dialog.suit = null; askVerdict(dialog); break;
+      case "slot": dialog.slot = [+el.getAttribute("data-i"), +el.getAttribute("data-j")]; renderDialog(); break;
+      case "pick": pickCard(dialog, el.getAttribute("data-c")); break;
       case "addhand":
         dialog.labels.push("Hand " + (dialog.labels.length + 1)); dialog.cards.push([null, null, null]);
         dialog.slot = firstEmpty(dialog); askVerdict(dialog);
@@ -1183,7 +1206,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         var di = +el.getAttribute("data-i");
         dialog.labels.splice(di, 1); dialog.cards.splice(di, 1);
         dialog.labels = dialog.labels.map(function (l, k) { return "Hand " + (k + 1); });
-        dialog.slot = firstEmpty(dialog) || [0, 0]; askVerdict(dialog);
+        dialog.slot = firstEmpty(dialog); askVerdict(dialog);
         break;
       case "scrim": if (e.target === el) closeDialog(); break;
     }

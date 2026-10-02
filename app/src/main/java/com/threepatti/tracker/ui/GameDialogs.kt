@@ -190,9 +190,8 @@ fun GameDialogs(
                 val mine = dialog.playerId == myId
                 MyCardsDialog(
                     title = if (mine) "Your cards" else "${state.nameOf(dialog.playerId)}'s cards",
-                    hint = (if (mine) "Only you can see them. " else "Only this phone shows them. ") +
-                        "In a side show the other player sees them, and at a show everyone does. The app then works out " +
-                        "who won and the host confirms. Shown cards can't be changed.",
+                    hint = (if (mine) "Only you see these" else "Only this phone shows these") +
+                        " until a side show or show. Tap a card again to take it back.",
                     initial = hand.enteredCards(),
                     rules = state.settings.handRules,
                     dismissLabel = if (dialog.afterSeeing) "Skip" else "Cancel",
