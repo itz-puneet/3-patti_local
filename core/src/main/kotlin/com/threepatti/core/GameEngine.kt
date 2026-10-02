@@ -168,10 +168,10 @@ object GameEngine {
     private fun startRound(state: GameState): GameState {
         if (state.isRoundActive) fail("Finish the current round first")
         val boot = state.settings.bootAmount
-        val eligible = state.players.filter { !it.sittingOut && it.balance >= boot }
+        val eligible = roundPlayers(state)
         if (eligible.size < 2) fail("Need at least 2 players with ${state.money(boot)} or more to start a round")
         val eligibleIds = eligible.map { it.id }.toSet()
-        val dealerId = nextDealer(state.players, state.lastDealerId, eligibleIds)
+        val dealerId = pickDealer(state, eligibleIds)
         val hands = eligible.map { Hand(playerId = it.id, status = HandStatus.BLIND, invested = boot) }
         val number = state.nextRoundNumber
         val draft = Round(
@@ -189,7 +189,10 @@ object GameEngine {
             players = state.players.map { if (it.id in eligibleIds) it.copy(balance = it.balance - boot) else it },
             round = round,
             lastDealerId = dealerId,
-        ).withLog("Round $number started. ${state.nameOf(dealerId)} deals, boot ${state.money(boot)} from ${hands.size} players")
+        ).withLog(
+            "Round $number started. ${state.nameOf(dealerId)} deals, ${state.nameOf(round.turnId)} goes first. " +
+                "Boot ${state.money(boot)} from ${hands.size} players",
+        )
         val short = state.players.filter { !it.sittingOut && it.balance < boot }
         if (short.isNotEmpty()) {
             next = next.withLog("${short.joinToString { it.name }} can't pay the boot and sit out this round")
@@ -315,6 +318,38 @@ object GameEngine {
             }
             else -> fail("There is no show waiting for a result")
         }
+    }
+
+    /**
+     * Who would deal the next 3 Patti round and who would go first, to show before it starts.
+     * Null at poker tables, while a round is running, or when fewer than 2 players can pay the boot.
+     */
+    fun nextDeal(state: GameState): Pair<String, String>? {
+        if (state.settings.isPoker || state.isRoundActive) return null
+        val eligible = roundPlayers(state).map { it.id }
+        if (eligible.size < 2) return null
+        val dealerId = pickDealer(state, eligible.toSet())
+        return dealerId to eligible[(eligible.indexOf(dealerId) + 1) % eligible.size]
+    }
+
+    private fun roundPlayers(state: GameState): List<Player> =
+        state.players.filter { !it.sittingOut && it.balance >= state.settings.bootAmount }
+
+    private fun pickDealer(state: GameState, eligibleIds: Set<String>): String =
+        lastWinnerSeat(state)?.let { seatAtOrBefore(state.players, it, eligibleIds) }
+            ?: nextDealer(state.players, state.lastDealerId, eligibleIds)
+
+    /**
+     * The winner of the last round deals the next one, so the player sitting after them goes first.
+     * With a split pot it's the winner who comes first after that round's dealer. Null before the
+     * first round, or when the winner has left the table.
+     */
+    private fun lastWinnerSeat(state: GameState): String? {
+        val result = state.results.lastOrNull { !it.undone } ?: return null
+        val ids = state.players.map { it.id }
+        // lastDealerId is still the dealer of that round: a cancelled round puts it back.
+        val dealer = ids.indexOf(state.lastDealerId)
+        return result.winnerIds.filter { it in ids }.minByOrNull { (ids.indexOf(it) - dealer - 1).mod(ids.size) }
     }
 
     private fun forceShow(state: GameState): GameState {

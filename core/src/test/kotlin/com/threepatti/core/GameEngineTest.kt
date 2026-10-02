@@ -231,20 +231,69 @@ class GameEngineTest {
         assertEquals("p1", s.act(StartRound).round!!.dealerId)
     }
 
+    private fun GameState.winRound(vararg winners: String): GameState =
+        act(StartRound).act(ForceShow).act(DeclareWinners(winners.toList()))
+
     @Test
-    fun dealerRotatesAndSkipsPlayersSittingOutOrShortOfChips() {
-        var s = table("Ravi", "Meena", "Kiran")
-        s = s.act(StartRound).act(ForceShow).act(DeclareWinners(listOf("p1")))
+    fun winnerDealsNextRoundSoThePlayerAfterThemGoesFirst() {
+        var s = table("Ravi", "Meena", "Kiran").winRound("p3")
+        assertEquals("p3" to "p4", GameEngine.nextDeal(s))
+        assertEquals("Meena deals next, Kiran goes first", nextDealText(s))
         s = s.act(StartRound)
+        assertNull(GameEngine.nextDeal(s))
+        assertEquals("p3", s.round!!.dealerId)
+        assertEquals("p4", s.round!!.turnId)
+        assertTrue(s.log.last().text.startsWith("Round 2 started. Meena deals, Kiran goes first."))
+        s = s.act(ForceShow).act(DeclareWinners(listOf("p4"))).act(StartRound)
+        assertEquals("p4", s.round!!.dealerId)
+        assertEquals("p1", s.round!!.turnId)
+    }
+
+    @Test
+    fun playerAfterWinnerGoesFirstEvenWhenWinnerSitsOut() {
+        var s = table("Ravi", "Meena", "Kiran", "Dev").winRound("p2")
+        s = s.act(SetSittingOut("p2", true))
+        assertEquals("p1" to "p3", GameEngine.nextDeal(s))
+        s = s.act(StartRound)
+        // Asha deals in Ravi's place, so Meena, who sits after Ravi, still goes first.
+        assertEquals("p1", s.round!!.dealerId)
+        assertEquals("p3", s.round!!.turnId)
+        s = s.act(CancelRound)
+        s = s.act(AdjustChips("p3", -s.balance("p3") + 2)).act(StartRound)
+        // Meena can't pay the boot either, so Kiran is the first player after Ravi.
+        assertEquals(listOf("p1", "p4", "p5"), s.round!!.hands.map { it.playerId })
+        assertEquals("p1", s.round!!.dealerId)
+        assertEquals("p4", s.round!!.turnId)
+        assertTrue(s.log.last().text.contains("Meena can't pay the boot"))
+    }
+
+    @Test
+    fun splitPotIsDealtByTheFirstWinnerAfterTheDealer() {
+        // Round 1 is dealt by Asha. Meena and Kiran split it, and Meena comes first after Asha.
+        var s = table("Ravi", "Meena", "Kiran").winRound("p4", "p3").act(StartRound)
+        assertEquals("p3", s.round!!.dealerId)
+        assertEquals("p4", s.round!!.turnId)
+        // Round 2 is dealt by Meena. Asha and Ravi split it; after Meena comes Kiran, then Asha.
+        s = s.act(ForceShow).act(DeclareWinners(listOf("p1", "p2"))).act(StartRound)
+        assertEquals("p1", s.round!!.dealerId)
+        assertEquals("p2", s.round!!.turnId)
+    }
+
+    @Test
+    fun misdealIsDealtAgainBySameWinner() {
+        var s = table("Ravi", "Meena", "Kiran").winRound("p3").act(StartRound).act(Bet("p4"))
+        s = s.act(CancelRound).act(StartRound)
+        assertEquals("p3", s.round!!.dealerId)
+        assertEquals("p4", s.round!!.turnId)
+    }
+
+    @Test
+    fun dealerMovesOneSeatWhenWinnerLeftTheTable() {
+        var s = table("Ravi", "Meena", "Kiran").winRound("p3")
+        // A winner can only be removed once they're back to even, so take the seat away directly.
+        s = s.copy(players = s.players.filter { it.id != "p3" }).act(StartRound)
         assertEquals("p2", s.round!!.dealerId)
-        s = s.act(ForceShow).act(DeclareWinners(listOf("p1")))
-        s = s.act(SetSittingOut("p3", true)).act(AdjustChips("p4", -s.balance("p4") + 2))
-        s = s.act(StartRound)
-        val round = s.round!!
-        assertEquals(listOf("p1", "p2"), round.hands.map { it.playerId })
-        assertEquals("p1", round.dealerId)
-        assertEquals("p2", round.turnId)
-        assertTrue(s.log.last().text.contains("Kiran can't pay the boot"))
+        assertEquals("p4", s.round!!.turnId)
     }
 
     @Test

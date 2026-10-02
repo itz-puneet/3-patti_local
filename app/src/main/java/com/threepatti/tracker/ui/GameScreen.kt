@@ -67,7 +67,12 @@ sealed interface GameDialog {
 }
 
 @Composable
-fun GameScreen(session: TableSession, onExit: () -> Unit) {
+fun GameScreen(
+    session: TableSession,
+    onExit: () -> Unit,
+    startInTableView: Boolean = true,
+    onViewChange: (tableView: Boolean) -> Unit = {},
+) {
     val state by session.state.collectAsState()
     val myId by session.myPlayerId.collectAsState()
     val connection by session.connection.collectAsState()
@@ -100,7 +105,7 @@ fun GameScreen(session: TableSession, onExit: () -> Unit) {
     if (current == null || me == null) {
         ConnectingScreen(session.hostAddress, connection, onCancel = onExit)
     } else {
-        GameContent(session, current, me, connection, canUndo, snackbar, onExit)
+        GameContent(session, current, me, connection, canUndo, snackbar, onExit, startInTableView, onViewChange)
     }
 
     val closed = connection as? ConnectionStatus.Closed
@@ -123,8 +128,11 @@ private fun GameContent(
     canUndo: Boolean,
     snackbar: SnackbarHostState,
     onExit: () -> Unit,
+    startInTableView: Boolean,
+    onViewChange: (tableView: Boolean) -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tableView by rememberSaveable { mutableStateOf(startInTableView) }
     var dialog by remember { mutableStateOf<GameDialog?>(null) }
     val openPlayer: (String) -> Unit = { id -> if (session.isHost || id == myId) dialog = GameDialog.PlayerMenu(id) }
 
@@ -167,6 +175,11 @@ private fun GameContent(
                         { dialog = GameDialog.Invite }
                     } else {
                         null
+                    },
+                    tableView = tableView,
+                    onTableViewChange = {
+                        tableView = it
+                        onViewChange(it)
                     },
                 )
                 1 -> LedgerTab(state, myId, canOpen = { session.isHost || it == myId }, onPlayerClick = openPlayer)

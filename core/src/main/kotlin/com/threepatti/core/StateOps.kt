@@ -29,6 +29,17 @@ internal fun GameState.pay(id: String, amount: Int): GameState =
             )
         }
 
+/**
+ * [seatId] if it is in [eligible], otherwise the nearest seat before it that is. The player after
+ * the returned seat is then the first one after [seatId] who plays. Null if [seatId] left the table.
+ */
+internal fun seatAtOrBefore(players: List<Player>, seatId: String, eligible: Set<String>): String? {
+    val ids = players.map { it.id }
+    val start = ids.indexOf(seatId)
+    if (start < 0) return null
+    return (0 until ids.size).map { ids[(start - it).mod(ids.size)] }.firstOrNull { it in eligible }
+}
+
 /** The next seat after [lastDealerId] that is in [eligible]. */
 internal fun nextDealer(players: List<Player>, lastDealerId: String?, eligible: Set<String>): String {
     val ids = players.map { it.id }

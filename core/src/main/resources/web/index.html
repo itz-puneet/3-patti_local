@@ -100,6 +100,51 @@ main { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; 
 .money .bal { font-weight: 700; font-size: 17px; }
 .pos { color: var(--primary); } .neg { color: var(--error); }
 .offline { color: var(--error); font-size: 12px; font-weight: 600; }
+.next-deal { font-weight: 600; margin-top: 6px; }
+
+/* Table view */
+.seg { display: flex; border: 1px solid var(--outline); border-radius: 99px; overflow: hidden; flex: none; }
+.seg button { flex: 1; background: transparent; color: var(--text); padding: 8px 0; font-weight: 600; }
+.seg button + button { border-left: 1px solid var(--outline); }
+.seg button.on { background: var(--secondary-c); color: var(--on-secondary-c); }
+.tbl { position: relative; width: 100%; flex: none; }
+.felt { position: absolute; border-radius: 50%; border: 12px solid #4A2F1B; box-shadow: 0 0 0 2px #2E1C10;
+  background: radial-gradient(ellipse at center, #237A51 0%, #15553A 100%); }
+.felt::after { content: ""; position: absolute; inset: 16px; border-radius: 50%; border: 1.5px solid rgba(242,250,244,.12); }
+.tcenter { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; color: #F2FAF4; width: max-content; }
+.tcenter .label { font-size: 11px; letter-spacing: 1.5px; font-weight: 600; opacity: .78; }
+.tcenter .amount { font-size: 34px; font-weight: 700; line-height: 1.15; }
+.tcenter .amount.l { font-size: 28px; }
+.tcenter .amount.xl { font-size: 24px; }
+.tcenter .dim { font-size: 13px; opacity: .78; }
+.tcenter .st { display: inline-block; margin: 0 6px; white-space: nowrap; }
+.tcenter .what { font-size: 15px; font-weight: 600; margin-top: 4px; }
+.tcenter .next { display: inline-block; margin-top: 6px; background: rgba(0,0,0,.22); border-radius: 99px; padding: 3px 10px; font-size: 13px; }
+.seat { position: absolute; width: 92px; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; }
+.seat[data-act] { cursor: pointer; }
+.seat.out { opacity: .5; }
+.seat .av { position: relative; width: 42px; height: 42px; margin: 4px; border-radius: 50%; background: var(--card-2); color: var(--text);
+  border: 2px solid rgba(46,28,16,.4); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 17px; }
+.seat.mine .av { background: var(--primary); color: var(--on-primary); }
+.seat.won .av { border-color: var(--primary); }
+.seat.turn .av { background: var(--secondary); color: var(--on-secondary); border-color: var(--secondary-c);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--secondary) 35%, transparent); }
+.seat .mk { position: absolute; bottom: -6px; width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(0,0,0,.25);
+  display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+.seat .mk.d { right: -6px; background: #fff; color: #1B1B1B; }
+.seat .mk.bl { left: -6px; font-size: 8px; background: var(--tertiary-c); color: var(--on-tertiary-c); }
+.seat .dot { position: absolute; right: -4px; top: -4px; width: 12px; height: 12px; border-radius: 50%; background: var(--error); border: 2px solid var(--bg); }
+.seat .nm { max-width: 100%; margin-top: 2px; padding: 3px 8px; border-radius: 10px; background: var(--card-2); text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+.seat.mine .nm { background: var(--primary-c); color: var(--on-primary-c); }
+.seat.won .nm { box-shadow: inset 0 0 0 2px var(--primary), 0 1px 3px rgba(0,0,0,.25); }
+.seat.turn .nm { box-shadow: inset 0 0 0 2px var(--secondary), 0 1px 3px rgba(0,0,0,.25); }
+.seat .nm .n { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.seat .nm .b { font-size: 12px; font-weight: 700; color: var(--primary); }
+.seat.mine .nm .b { color: var(--on-primary-c); }
+.seat .pill { margin-top: 3px; font-size: 11px; }
+.tbl.compact .seat { width: 80px; }
+.tbl.compact .seat .av { width: 36px; height: 36px; font-size: 15px; }
 
 /* Action panel */
 .panel { position: sticky; bottom: 0; background: var(--panel); box-shadow: 0 -2px 10px rgba(0,0,0,.15);
@@ -157,6 +202,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   var closedMessage = "";
   var data = null;              // latest WebUpdate from the host
   var tab = "table";
+  var view = store.get("view") === "list" ? "list" : "table";   // the Table tab as a drawn table or a list
   var busy = false;
   var es = null;
   var toastTimer = null;
@@ -352,11 +398,105 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   }
 
   function tableTab(u) {
+    var html = '<div class="seg">' + ["table", "list"].map(function (v) {
+      return '<button data-act="view" data-view="' + v + '" class="' + (view === v ? "on" : "") + '">' +
+        (v === "table" ? "Table" : "List") + "</button>";
+    }).join("") + "</div>";
+    return html + (view === "table" ? tableView(u) : listView(u));
+  }
+
+  // n points spread evenly along an oval, starting at the bottom and going clockwise on screen.
+  // Spacing is by distance along the edge, so seats don't bunch up.
+  function ovalSpots(n, rx, ry) {
+    var steps = 720, pts = [], along = [0], i;
+    for (i = 0; i <= steps; i++) {
+      var t = Math.PI / 2 + 2 * Math.PI * i / steps;
+      pts.push([rx * Math.cos(t), ry * Math.sin(t)]);
+      if (i > 0) along.push(along[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    }
+    var out = [], j = 0;
+    for (i = 0; i < n; i++) {
+      var target = along[steps] * i / n;
+      while (j < steps && along[j] < target) j++;
+      out.push(pts[j]);
+    }
+    return out;
+  }
+
+  // The players seated round a card table in turn order. You sit at the bottom and play passes
+  // clockwise, so the player after you is on your left.
+  function tableView(u) {
+    var s = u.state, n = s.players.length, mine = 0, i;
+    for (i = 0; i < n; i++) if (s.players[i].id === u.playerId) mine = i;
+    var seats = s.players.slice(mine).concat(s.players.slice(0, mine));
+    var compact = n > 8, seatW = compact ? 80 : 92, seatH = compact ? 106 : 114;
+    var width = Math.min(document.documentElement.clientWidth, 560) - 24;
+    var ideal = width * (n <= 4 ? 1.05 : n <= 6 ? 1.2 : n <= 8 ? 1.35 : n <= 10 ? 1.55 : 1.75);
+    var least = Math.min(ideal, n <= 4 ? 330 : n <= 6 ? 380 : n <= 8 ? 420 : n <= 10 ? 500 : 580);
+    // Shrink to fit above the buttons while the seats still have room.
+    var height = Math.round(Math.max(least, Math.min(ideal, window.innerHeight - 340)));
+    var rx = (width - seatW) / 2, ry = (height - seatH) / 2, spots = ovalSpots(n, rx, ry);
+    var html = '<div class="tbl' + (compact ? " compact" : "") + '" style="height:' + height + 'px">' +
+      '<div class="felt" style="left:' + (seatW / 2 - 8) + "px;right:" + (seatW / 2 - 8) + "px;top:" + (seatH / 2 - 8) +
+      "px;bottom:" + (seatH / 2 - 8) + 'px"></div>' +
+      '<div class="tcenter" style="max-width:' + Math.max(120, Math.round(rx * 2 - seatW - 16)) + 'px">' + tableCentre(u) + "</div>";
+    seats.forEach(function (p, k) {
+      html += seat(u, p, Math.round(width / 2 + spots[k][0]), Math.round(height / 2 + spots[k][1]));
+    });
+    return html + "</div>";
+  }
+
+  function tableCentre(u) {
+    var s = u.state, r = s.round;
+    var next = u.nextDealText ? '<div class="next">' + esc(u.nextDealText) + "</div>" : "";
+    if (!r) {
+      return '<div class="what">' + (isPoker(s) ? "No hand being played" : "No round running") + '</div><div class="dim">' +
+        "Everyone starts with " + money(s.settings.startingBalance) + "</div>" + next;
+    }
+    var W = word(s).toUpperCase(), pot = money(r.pot);
+    var html = '<div class="label">' + (isActive(r) ? W + " " + r.number + " · POT" : W + " " + r.number + " FINISHED") + "</div>" +
+      '<div class="amount' + (pot.length > 7 ? " xl" : pot.length > 5 ? " l" : "") + '">' + pot + "</div>";
+    if (isActive(r)) {
+      var stakes = isPoker(s) ? ["Blinds " + money(s.settings.smallBlind) + "/" + money(s.settings.bigBlind)]
+        .concat(s.settings.ante > 0 ? ["Ante " + money(s.settings.ante)] : [])
+        .concat(r.phase === "BETTING" ? ["Bet " + money(r.currentBet)] : []) :
+        ["Blind " + money(r.stake), "Chaal " + money(r.stake * 2)];
+      // Each stake wraps as a whole, so a line never ends in a separator.
+      html += '<div class="dim">' + stakes.map(function (t) { return '<span class="st">' + t + "</span>"; }).join("") + "</div>";
+    }
+    return html + '<div class="what">' + esc(u.roundText) + "</div>" + (isActive(r) ? "" : next);
+  }
+
+  function seat(u, p, x, y) {
+    var s = u.state, r = s.round, h = handOf(r, p.id), mine = p.id === u.playerId;
+    var turn = isActive(r) && ((r.phase === "BETTING" && r.turnId === p.id) ||
+      (r.phase === "SIDE_SHOW_REQUESTED" && r.sideShow && r.sideShow.targetId === p.id));
+    var won = r && !isActive(r) && r.winnerIds.indexOf(p.id) >= 0;
+    var out = isActive(r) ? !h || h.status === "PACKED" : p.sittingOut;
+    // The status, with the chips put in this round while it runs.
+    var st = status0(s, p), label = st[0];
+    if (isActive(r) && h && h.status !== "PACKED") {
+      if (!isPoker(s)) label += " · " + money(h.invested);
+      else if (h.streetBet > 0) label = (h.allIn ? "All-in " : "Bet ") + money(h.streetBet);
+    }
+    var blind = isActive(r) && isPoker(s) ? (r.smallBlindId === p.id ? "SB" : r.bigBlindId === p.id ? "BB" : "") : "";
+    return '<div class="seat' + (turn ? " turn" : "") + (mine ? " mine" : "") + (out ? " out" : "") + (won ? " won" : "") +
+      '" style="left:' + x + "px;top:" + y + 'px"' + (mine ? ' data-act="me"' : "") + ">" +
+      '<div class="av">' + esc(p.name.charAt(0).toUpperCase()) +
+      (isActive(r) && r.dealerId === p.id ? '<span class="mk d">D</span>' : "") +
+      (blind ? '<span class="mk bl">' + blind + "</span>" : "") +
+      (!p.isHost && p.hasDevice && !p.connected ? '<span class="dot"></span>' : "") + "</div>" +
+      '<div class="nm"><div class="n">' + (mine ? "You" : esc(p.name)) + '</div><div class="b">' + money(p.balance) + "</div></div>" +
+      '<span class="pill ' + st[1] + '">' + esc(label) + "</span></div>";
+  }
+
+  function listView(u) {
     var s = u.state, r = s.round, html = '<div class="card pot">';
+    var next = u.nextDealText ? '<div class="next-deal">' + esc(u.nextDealText) + "</div>" : "";
     if (!r) {
       html += '<div class="what">' + (isPoker(s) ? "No hand being played" : "No round running") +
         "</div><div>Everyone starts with " + money(s.settings.startingBalance) +
-        '</div><div class="small">' + esc(u.rulesSummary) + "</div>";
+        '</div><div class="small">' + esc(u.rulesSummary) + "</div>" + next;
     } else {
       var W = word(s).toUpperCase();
       html += '<div class="label">' + (isActive(r) ? W + " " + r.number + " · POT" : W + " " + r.number + " FINISHED") + "</div>" +
@@ -368,7 +508,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       } else if (isActive(r)) {
         html += "<div>Blind <b>" + money(r.stake) + "</b> &nbsp; Chaal <b>" + money(r.stake * 2) + "</b></div>";
       }
-      html += '<div class="what">' + esc(u.roundText) + '</div><div class="small">Dealer: ' + esc(nameOf(s, r.dealerId)) + "</div>";
+      html += '<div class="what">' + esc(u.roundText) + "</div>" +
+        (isActive(r) ? '<div class="small">Dealer: ' + esc(nameOf(s, r.dealerId)) + "</div>" : next);
     }
     html += "</div>";
     s.players.forEach(function (p) {
@@ -585,6 +726,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         "• An all-in player can only win what they matched from each other player. The app works out the side pots.<br>" +
         "• At showdown the host taps who won each pot.</div>" : "") + (isPoker(data.state) ? "" :
         "• Every round starts with a boot of " + money(set.bootAmount) + " from each player. The stake starts at the boot.<br>" +
+        "• The winner of a round deals the next one, so the player after the winner goes first.<br>" +
         "• Blind players bet the stake. Seen players bet twice the stake (chaal).<br>" +
         "• Raise doubles the stake for everyone after you.<br>" +
         "• Side show: a seen player can ask the previous seen player to compare cards privately. The weaker hand packs.<br>" +
@@ -598,6 +740,16 @@ h2 { font-size: 17px; margin: 8px 0 0; }
 
   // Taps
 
+  // The drawn table is sized to the screen, so draw it again when the width changes (the phone turns).
+  // Height changes are ignored: on Android the keyboard opening changes it.
+  var drawnWidth = document.documentElement.clientWidth;
+  window.addEventListener("resize", function () {
+    var w = document.documentElement.clientWidth;
+    if (w === drawnWidth) return;
+    drawnWidth = w;
+    if (data && (status === "live" || status === "reconnecting")) render();
+  });
+
   document.addEventListener("click", function (e) {
     var el = e.target.closest ? e.target.closest("[data-act]") : null;
     if (!el || el.disabled) return;
@@ -608,6 +760,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       case "join": join(); break;
       case "leave": if (es) { es.close(); es = null; } status = "join"; data = null; store.del("joined"); render(); break;
       case "tab": tab = el.getAttribute("data-tab"); render(); window.scrollTo(0, 0); break;
+      case "view": view = el.getAttribute("data-view"); store.set("view", view); render(); break;
       case "bet": send({ type: "bet", playerId: me, raise: false }); break;
       case "raise": send({ type: "bet", playerId: me, raise: true }); break;
       case "see": send({ type: "see", playerId: me }); break;

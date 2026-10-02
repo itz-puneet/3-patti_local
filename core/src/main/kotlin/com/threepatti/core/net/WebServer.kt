@@ -11,6 +11,7 @@ import com.threepatti.core.Settlement
 import com.threepatti.core.TableHost
 import com.threepatti.core.Transfer
 import com.threepatti.core.describeRound
+import com.threepatti.core.nextDealText
 import com.threepatti.core.summary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +45,8 @@ data class WebUpdate(
     val transfers: List<Transfer>,
     val roundText: String?,
     val rulesSummary: String,
+    /** Who deals the next 3 Patti round and who goes first, between rounds. */
+    val nextDealText: String? = null,
 )
 
 @Serializable
@@ -223,6 +226,7 @@ class WebServer(
         transfers = Settlement.transfers(state.players),
         roundText = state.round?.let { describeRound(state, it) },
         rulesSummary = state.settings.summary(),
+        nextDealText = nextDealText(state),
     )
 
     private fun respondJson(out: OutputStream, code: Int, result: WebResult) = respond(

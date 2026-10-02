@@ -328,6 +328,7 @@ fun RulesText(settings: TableSettings) {
     } else {
         listOf(
             "Every round starts with a boot of ${m(settings.bootAmount)} from each player. The stake starts at the boot.",
+            "The winner of a round deals the next one, so the player after the winner goes first.",
             "Blind players (who haven't looked) bet the stake. Seen players bet twice the stake (chaal).",
             "Raise doubles the stake for everyone after you.",
             "Side show: a seen player can ask the previous seen player to compare cards privately. The weaker hand packs.",

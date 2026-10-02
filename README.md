@@ -41,6 +41,11 @@ one and keeps your data.
    then acts on their own phone when it's their turn. In 3 Patti: **See cards**, **Blind/Chaal**,
    **Raise**, **Pack**, **Show** or **Side show**. In poker: **Fold**, **Check**, **Call**, **Bet** or
    **Raise** (with a slider and Min / ½ pot / Pot / All-in shortcuts).
+   The **Table** tab draws everyone round a card table in turn order, with you at the bottom and play
+   going clockwise. It shows the pot in the middle, each player's chips and status, the dealer button,
+   and whose turn it is. Between 3 Patti rounds it says who deals next and who goes first. Tap **List**
+   for a plain list of players instead. So the drawing matches where everyone really sits, the host can
+   tap a player and use **Move seat up** or **Move seat down**.
 5. **Results.** For a show, side show or poker showdown, compare cards on the table and the host taps
    who won. With side pots the host picks the winner of each pot, main pot first. The chips go to the
    winners automatically.
@@ -62,7 +67,9 @@ one and keeps your data.
 | Show | Allowed when two players are left. Costs one bet. The host enters the winner. |
 | Side show | A seen player asks the previous seen player to compare privately. If accepted, the host enters the winner and the other packs. |
 
-Dealer and first turn move one seat each round. Players who can't pay the boot, or who sit out, are skipped.
+The winner of each round deals the next one, so the player sitting after the winner goes first. If the winner
+sits out, the player after their seat still goes first. With a split pot, the winner who comes first after
+that round's dealer deals. Players who can't pay the boot, or who sit out, are skipped.
 
 ## Poker betting rules
 

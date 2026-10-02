@@ -8,6 +8,10 @@ fun GameState.namesOf(ids: List<String>): String = when (ids.size) {
     else -> ids.dropLast(1).joinToString { nameOf(it) } + " and " + nameOf(ids.last())
 }
 
+/** "Ravi deals next, Meena goes first", shown between 3 Patti rounds. */
+fun nextDealText(state: GameState): String? =
+    GameEngine.nextDeal(state)?.let { (dealer, first) -> "${state.nameOf(dealer)} deals next, ${state.nameOf(first)} goes first" }
+
 /** One line saying what the table is waiting for. */
 fun describeRound(state: GameState, round: Round): String {
     val sideShow = round.sideShow

@@ -68,6 +68,8 @@ private fun AppRoot(app: TrackerApp, onMinimize: () -> Unit) {
                 saved = app.sessions.savedTable()
                 screen = Screen.Home
             },
+            startInTableView = app.prefs.tableView,
+            onViewChange = { app.prefs.tableView = it },
         )
         return
     }

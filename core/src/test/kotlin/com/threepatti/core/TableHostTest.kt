@@ -85,6 +85,11 @@ class TableHostTest {
         assertEquals(listOf(true, false), results.map { it.undone })
         assertEquals(listOf(1, 1), results.map { it.number })
         assertEquals(2, host.state.value.nextRoundNumber)
+
+        // Only the result that counts decides who deals next: Asha, not Ravi.
+        assertNull(host.perform(StartRound))
+        assertEquals("p1", host.state.value.round!!.dealerId)
+        assertEquals(ravi, host.state.value.round!!.turnId)
     }
 
     @Test

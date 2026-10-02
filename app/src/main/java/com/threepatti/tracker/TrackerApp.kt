@@ -39,9 +39,15 @@ class Prefs(context: Context) {
         get() = prefs.getString(KEY_LAST_HOST, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_LAST_HOST, value).apply()
 
+    /** The Table tab shows a drawn table (true) or a list of players (false). */
+    var tableView: Boolean
+        get() = prefs.getBoolean(KEY_TABLE_VIEW, true)
+        set(value) = prefs.edit().putBoolean(KEY_TABLE_VIEW, value).apply()
+
     private companion object {
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_NAME = "name"
         const val KEY_LAST_HOST = "last_host"
+        const val KEY_TABLE_VIEW = "table_view"
     }
 }

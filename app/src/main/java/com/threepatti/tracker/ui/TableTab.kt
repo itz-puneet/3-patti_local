@@ -2,6 +2,7 @@ package com.threepatti.tracker.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -18,7 +19,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,6 +39,7 @@ import com.threepatti.core.RoundPhase
 import com.threepatti.core.describeRound
 import com.threepatti.core.formatMoney
 import com.threepatti.core.formatSignedMoney
+import com.threepatti.core.nextDealText
 import com.threepatti.core.summary
 
 @Composable
@@ -43,44 +49,69 @@ fun TableTab(
     canOpen: (String) -> Boolean,
     onPlayerClick: (String) -> Unit,
     onInvite: (() -> Unit)?,
+    tableView: Boolean,
+    onTableViewChange: (Boolean) -> Unit,
 ) {
-    LazyColumn(
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        item(key = "pot") { PotCard(state) }
-        items(state.players, key = { it.id }) { player ->
-            PlayerRow(
-                state = state,
-                player = player,
-                isMe = player.id == myId,
-                clickable = canOpen(player.id),
-                onClick = { onPlayerClick(player.id) },
-            )
-        }
-        if (onInvite != null && state.round == null) {
-            item(key = "invite") {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Invite players", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Players with the app tap Join a table. iPhones scan a QR code and play in the browser.",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Button(
-                            onClick = onInvite,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.secondary,
-                                contentColor = MaterialTheme.colorScheme.onSecondary,
-                            ),
-                        ) { Text("Show QR code and address") }
+    BoxWithConstraints {
+        // What's left for the table under the Table/List switch, above the action buttons.
+        val tableRoom = maxHeight - 76.dp
+        LazyColumn(
+            contentPadding = PaddingValues(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            item(key = "view") { ViewSwitch(tableView, onTableViewChange) }
+            if (tableView) {
+                item(key = "table") { TableView(state, myId, canOpen, onPlayerClick, fitHeight = tableRoom) }
+            } else {
+                item(key = "pot") { PotCard(state) }
+                items(state.players, key = { it.id }) { player ->
+                    PlayerRow(
+                        state = state,
+                        player = player,
+                        isMe = player.id == myId,
+                        clickable = canOpen(player.id),
+                        onClick = { onPlayerClick(player.id) },
+                    )
+                }
+            }
+            if (onInvite != null && state.round == null) {
+                item(key = "invite") {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Invite players", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Players with the app tap Join a table. iPhones scan a QR code and play in the browser.",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Button(
+                                onClick = onInvite,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary,
+                                ),
+                            ) { Text("Show QR code and address") }
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ViewSwitch(tableView: Boolean, onChange: (Boolean) -> Unit) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        listOf("Table", "List").forEachIndexed { index, label ->
+            SegmentedButton(
+                selected = tableView == (index == 0),
+                onClick = { onChange(index == 0) },
+                shape = SegmentedButtonDefaults.itemShape(index, 2),
+            ) { Text(label) }
         }
     }
 }
@@ -113,6 +144,7 @@ private fun PotCard(state: GameState) {
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(state.settings.summary(), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                nextDealText(state)?.let { NextDealLine(it) }
             } else {
                 Text(
                     if (round.isActive) "$word ${round.number}  ·  POT" else "$word ${round.number} FINISHED",
@@ -143,10 +175,25 @@ private fun PotCard(state: GameState) {
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
                 )
-                Text("Dealer: ${state.nameOf(round.dealerId)}", style = MaterialTheme.typography.bodySmall)
+                if (round.isActive) {
+                    Text("Dealer: ${state.nameOf(round.dealerId)}", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    nextDealText(state)?.let { NextDealLine(it) }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun NextDealLine(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(top = 6.dp),
+    )
 }
 
 @Composable
