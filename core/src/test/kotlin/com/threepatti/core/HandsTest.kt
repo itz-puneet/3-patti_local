@@ -133,6 +133,63 @@ class HandsTest {
         assertEquals(listOf("asha"), TeenPatti.decide(mapOf("asha" to cards("AS AH 5D"), "ravi" to cards("AC JD 5C")), "asha").winners)
     }
 
+    private val ak47 = HandRules.of(Variant.AK47)
+    private fun best(text: String, rules: HandRules) = TeenPatti.best(cards(text), rules)
+
+    @Test
+    fun muflisGivesThePotToTheLowestHand() {
+        val muflis = HandRules.of(Variant.MUFLIS)
+        val verdict = TeenPatti.decide(
+            mapOf("asha" to cards("AS AH AD"), "ravi" to cards("5C 3D 2H"), "meena" to cards("9S 8S 7S")),
+            rules = muflis,
+        )
+        assertEquals(listOf("ravi"), verdict.winners)
+        assertEquals("High card 5-3-2", verdict.hands.getValue("ravi").name)
+        // 4-3-2 is a sequence, so it loses to 6-3-2 when the lowest wins.
+        assertEquals(listOf(2), TeenPatti.decide(mapOf(1 to cards("4C 3D 2H"), 2 to cards("6C 3S 2D")), rules = muflis).winners)
+    }
+
+    @Test
+    fun ak47CardsAreJokers() {
+        assertEquals("Trail of 9s (A♠ as 9♠, K♦ as 9♥)", best("AS KD 9C", ak47).name)
+        assertEquals("Trail of 9s (7♠ as 9♠)", best("7S 9D 9C", ak47).name)
+        assertEquals("Pure sequence Q-J-10 (4♣ as Q♣)", best("JC 10C 4C", ak47).name)
+        assertEquals(HandType.HIGH_CARD, best("QS 9H 2D", ak47).type, "no jokers, no change")
+        assertEquals("Trail of Aces", best("AS AH AC", ak47).name, "jokers that stay themselves aren't listed")
+        assertEquals("Trail of Aces (K♦ as A♥)", best("AS KD AC", ak47).name)
+    }
+
+    @Test
+    fun jokerRankIsChosenForTheDeal() {
+        val sevens = HandRules.of(Variant.JOKER, setOf(7))
+        assertEquals("Pure sequence 10-9-8 (7♣ as 9♣)", best("10C 8C 7C", sevens).name)
+        assertEquals(HandType.PAIR, best("KS KH 2D", sevens).type)
+        val verdict = TeenPatti.decide(mapOf("asha" to cards("7S 9D 9H"), "ravi" to cards("QS QH QD")), rules = sevens)
+        assertEquals(listOf("ravi"), verdict.winners, "a trail of queens beats a trail of 9s made with a joker")
+        assertEquals("Trail of 9s (7♠ as 9♠)", verdict.hands.getValue("asha").name)
+        val pairs = TeenPatti.decide(mapOf("asha" to cards("7S 2D 9H"), "ravi" to cards("QS QH 4D")), rules = sevens)
+        assertEquals("Pair of 9s + 2 (7♠ as 9♠)", pairs.hands.getValue("asha").name)
+        assertEquals(listOf("ravi"), pairs.winners)
+    }
+
+    @Test
+    fun threeJokersMakeTheBestOrLowestHandAndNoCardRepeats() {
+        assertEquals("Trail of Aces (K♠ as A♥, 4♦ as A♦)", best("AS KS 4D", ak47).name)
+        assertEquals("Trail of Aces (K♠ as A♠, K♥ as A♥, K♦ as A♦)", best("KS KH KD", ak47).name)
+        val lowest = TeenPatti.best(cards("KS KH KD"), HandRules(lowestWins = true, wildRanks = setOf(13)))
+        assertEquals("High card 5-3-2 (K♠ as 5♠, K♥ as 3♥, K♦ as 2♦)", lowest.name)
+        val two = best("7S 4H QD", ak47)
+        assertEquals("Trail of Queens (7♠ as Q♠, 4♥ as Q♥)", two.name)
+        assertEquals(3, (two.jokers.map { it.second } + Card.parse("QD")!!).toSet().size, "every card in the hand is different")
+    }
+
+    @Test
+    fun lowestWinsWithJokersPicksTheWeakestHand() {
+        val rules = HandRules(lowestWins = true, wildRanks = setOf(7))
+        assertEquals("High card 5-3-2 (7♠ as 5♠)", TeenPatti.best(cards("7S 2H 3D"), rules).name)
+        assertEquals(listOf(1), TeenPatti.decide(mapOf(1 to cards("7S 2H 3D"), 2 to cards("6C 4S 2D")), rules = rules).winners)
+    }
+
     @Test
     fun rejectsCardsEnteredTwiceOrIncompleteHands() {
         assertEquals(

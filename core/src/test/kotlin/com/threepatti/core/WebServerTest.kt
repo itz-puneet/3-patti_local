@@ -114,6 +114,11 @@ class WebServerTest {
         assertTrue(partial.winners.isEmpty())
         assertEquals("A♠ is entered twice", compare("""{"hands":[["AS","KH","2D"],["AS","3H","4D"]]}""").error)
         assertEquals("Unknown card ZZ", compare("""{"hands":[["ZZ"]]}""").error)
+        val muflis = compare("""{"hands":[["AS","AH","AD"],["5C","3D","2H"]],"variant":"MUFLIS"}""")
+        assertEquals(listOf(1), muflis.winners)
+        val joker = compare("""{"hands":[["7S","9D","9H"],["QS","QH","4D"]],"variant":"JOKER","jokerRanks":[7]}""")
+        assertEquals("Trail of 9s (7♠ as 9♠)", joker.names[0])
+        assertEquals(listOf(0), joker.winners)
     }
 
     @Test

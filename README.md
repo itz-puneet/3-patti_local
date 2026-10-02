@@ -49,12 +49,17 @@ separate app, so it can sit next to the APK, and both play at the same table.
    and whose turn it is. Between 3 Patti rounds it says who deals next and who goes first. Tap **List**
    for a plain list of players instead. So the drawing matches where everyone really sits, the host can
    tap a player and use **Move seat up** or **Move seat down**.
+   Your phone vibrates when your turn starts; switch it off in **⋮ → Vibrate on my turn**. Android phones
+   playing in a browser vibrate too; iPhones don't let web pages vibrate.
 5. **Results.** For a show, side show or poker showdown, compare cards on the table and the host taps
    who won. With side pots the host picks the winner of each pot, main pot first. The chips go to the
    winners automatically.
    Not sure who won a 3 Patti show or side show? Tap **Not sure? Decide from the cards**, enter everyone's
    3 cards and the app names each hand and the winner; the host can then give the pot in one tap.
-   **⋮ → Which hand wins?** checks any hands at any time.
+   **⋮ → Which hand wins?** checks any hands at any time. Pick the variant you're playing: **Classic**,
+   **Muflis** (rankings reversed, the lowest hand wins), **AK47** (aces, kings, 4s and 7s are jokers) or
+   **Joker** (pick the joker rank). A joker stands for whichever card makes the best hand, or the lowest
+   in Muflis, and the app shows what it used, such as "Trail of 9s (K♠ as 9♥)".
 6. **Settle up.** The **Ledger** tab shows everyone's chips and profit or loss, and a **Settle up** list
    of who pays whom.
 

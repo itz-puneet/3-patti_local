@@ -65,19 +65,50 @@ enum class HandType(val label: String) {
     TRAIL("Trail"),
 }
 
+/** 3 Patti variants that change who wins a show. */
+enum class Variant(val label: String, val description: String) {
+    CLASSIC("Classic", "Normal 3 Patti rankings"),
+    MUFLIS("Muflis", "Rankings are reversed: the lowest hand wins"),
+    AK47("AK47", "Aces, kings, 4s and 7s are jokers"),
+    JOKER("Joker", "Every card of the joker rank is a joker"),
+}
+
+/** How hands are ranked in one deal. Jokers ([wildRanks]) stand for whatever card helps their hand most. */
+data class HandRules(val lowestWins: Boolean = false, val wildRanks: Set<Int> = emptySet()) {
+    companion object {
+        fun of(variant: Variant, jokerRanks: Set<Int> = emptySet()): HandRules = when (variant) {
+            Variant.CLASSIC -> HandRules()
+            Variant.MUFLIS -> HandRules(lowestWins = true)
+            Variant.AK47 -> HandRules(wildRanks = setOf(14, 13, 4, 7))
+            Variant.JOKER -> HandRules(wildRanks = jokerRanks)
+        }
+    }
+}
+
 /** A ranked 3 card hand. Hands compare by type, then by their cards from the most important down. */
 class TeenPattiHand internal constructor(
     val cards: List<Card>,
     val type: HandType,
     private val strength: List<Int>,
-    /** Such as "Pure sequence A-K-Q" or "Pair of 7s + K". */
+    /** Such as "Pure sequence A-K-Q", "Pair of 7s + K" or "Trail of 9s (K♠ as 9♥)". */
     val name: String,
+    /** Jokers in the hand and the card each one stands for, when that's a different card. */
+    val jokers: List<Pair<Card, Card>> = emptyList(),
 ) : Comparable<TeenPattiHand> {
     override fun compareTo(other: TeenPattiHand): Int {
         if (type != other.type) return type.compareTo(other.type)
         strength.zip(other.strength).forEach { (a, b) -> if (a != b) return a.compareTo(b) }
         return 0
     }
+
+    /** This hand made with jokers: [cards] as entered, each joker standing for its pair in [swaps]. */
+    internal fun withJokers(cards: List<Card>, swaps: List<Pair<Card, Card>>) = TeenPattiHand(
+        cards,
+        type,
+        strength,
+        "$name (${swaps.joinToString { (joker, card) -> "${joker.label} as ${card.label}" }})",
+        swaps,
+    )
 
     override fun toString() = name
 }
@@ -117,6 +148,54 @@ object TeenPatti {
         }
     }
 
+    private val deck = Suit.entries.flatMap { suit -> (2..14).map { Card(it, suit) } }
+
+    /**
+     * The best hand [cards] make under [rules], or the lowest when the lowest wins. Each joker is tried
+     * as every card not already in the hand.
+     */
+    fun best(cards: List<Card>, rules: HandRules = HandRules()): TeenPattiHand {
+        if (cards.size != 3) fail("A hand has 3 cards")
+        val wild = cards.indices.filter { cards[it].rank in rules.wildRanks }
+        if (wild.isEmpty()) return evaluate(cards)
+        val chosen = when {
+            // Three jokers can be anything: a trail of aces, keeping any aces already there...
+            wild.size == 3 && !rules.lowestWins -> {
+                val spare = Suit.entries.map { Card(14, it) }.filter { it !in cards }.iterator()
+                cards.map { if (it.rank == 14) it else spare.next() }
+            }
+            // ...or for the lowest hand 5-3-2 in mixed suits.
+            wild.size == 3 -> listOf("5S", "3H", "2D").map { Card.parse(it)!! }
+            else -> {
+                val others = deck.filter { it !in cards }
+                var bestCards = cards
+                var bestHand: TeenPattiHand? = null
+                fun visit(index: Int, current: MutableList<Card>) {
+                    if (index == wild.size) {
+                        val hand = evaluate(current)
+                        val better = bestHand?.let { if (rules.lowestWins) hand < it else hand > it } ?: true
+                        if (better) {
+                            bestHand = hand
+                            bestCards = current.toList()
+                        }
+                        return
+                    }
+                    // A joker first stays itself, so it only changes when that makes a better hand.
+                    for (card in listOf(cards[wild[index]]) + others) {
+                        // Two jokers never stand for the same card.
+                        if (wild.take(index).any { current[it] == card }) continue
+                        current[wild[index]] = card
+                        visit(index + 1, current)
+                    }
+                }
+                visit(0, cards.toMutableList())
+                bestCards
+            }
+        }
+        val swaps = wild.map { cards[it] to chosen[it] }.filter { (joker, card) -> joker != card }
+        return if (swaps.isEmpty()) evaluate(cards) else evaluate(chosen).withJokers(cards, swaps)
+    }
+
     /** How strong a sequence [ranks] (highest first) is, or null when they aren't one. */
     private fun runStrength(ranks: List<Int>): Int? = when {
         ranks == listOf(14, 13, 12) -> 15
@@ -126,15 +205,15 @@ object TeenPatti {
     }
 
     /**
-     * Decides a show from everyone's cards. Equal best hands split the pot, except in a side show,
+     * Decides a show from everyone's cards under [rules]. Equal best hands split the pot, except in a side show,
      * where the player who asked for it ([sideShowAsker]) packs.
      */
-    fun <K> decide(cards: Map<K, List<Card>>, sideShowAsker: K? = null): Verdict<K> {
+    fun <K> decide(cards: Map<K, List<Card>>, sideShowAsker: K? = null, rules: HandRules = HandRules()): Verdict<K> {
         if (cards.size < 2) fail("Enter at least 2 hands")
         val seen = mutableSetOf<Card>()
         cards.values.flatten().forEach { if (!seen.add(it)) fail("${it.label} is entered twice") }
-        val hands = cards.mapValues { evaluate(it.value) }
-        val best = hands.values.max()
+        val hands = cards.mapValues { best(it.value, rules) }
+        val best = if (rules.lowestWins) hands.values.min() else hands.values.max()
         val top = hands.filterValues { it.compareTo(best) == 0 }.keys.toList()
         return when {
             top.size == 1 -> Verdict(hands, top, null)

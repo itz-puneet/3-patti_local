@@ -39,6 +39,11 @@ class Prefs(context: Context) {
         get() = prefs.getString(KEY_LAST_HOST, "").orEmpty()
         set(value) = prefs.edit().putString(KEY_LAST_HOST, value).apply()
 
+    /** Buzz when it becomes this player's turn. */
+    var vibrateOnTurn: Boolean
+        get() = prefs.getBoolean(KEY_VIBRATE, true)
+        set(value) = prefs.edit().putBoolean(KEY_VIBRATE, value).apply()
+
     /** The Table tab shows a drawn table (true) or a list of players (false). */
     var tableView: Boolean
         get() = prefs.getBoolean(KEY_TABLE_VIEW, true)
@@ -49,5 +54,6 @@ class Prefs(context: Context) {
         const val KEY_NAME = "name"
         const val KEY_LAST_HOST = "last_host"
         const val KEY_TABLE_VIEW = "table_view"
+        const val KEY_VIBRATE = "vibrate_on_turn"
     }
 }

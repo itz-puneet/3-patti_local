@@ -5,6 +5,7 @@ import com.threepatti.core.Card
 import com.threepatti.core.GameAction
 import com.threepatti.core.GameRuleException
 import com.threepatti.core.GameState
+import com.threepatti.core.HandRules
 import com.threepatti.core.PokerOptions
 import com.threepatti.core.PokerRules
 import com.threepatti.core.Rules
@@ -13,6 +14,7 @@ import com.threepatti.core.Settlement
 import com.threepatti.core.TableHost
 import com.threepatti.core.TeenPatti
 import com.threepatti.core.Transfer
+import com.threepatti.core.Variant
 import com.threepatti.core.describeRound
 import com.threepatti.core.fail
 import com.threepatti.core.nextDealText
@@ -58,7 +60,13 @@ data class WebResult(val ok: Boolean, val error: String? = null)
 
 /** Cards entered on the browser's Decide winner screen: card codes such as "AS" for each hand. */
 @Serializable
-data class CompareRequest(val hands: List<List<String>>, val sideShowAsker: Int? = null)
+data class CompareRequest(
+    val hands: List<List<String>>,
+    val sideShowAsker: Int? = null,
+    val variant: Variant = Variant.CLASSIC,
+    /** The joker ranks, for [Variant.JOKER]. */
+    val jokerRanks: Set<Int> = emptySet(),
+)
 
 /**
  * The name of each hand that has all 3 cards (null for the others) and, once every hand is complete,
@@ -229,11 +237,12 @@ class WebServer(
         val result = runCatching {
             val input = Wire.json.decodeFromString(CompareRequest.serializer(), request.body.toString(Charsets.UTF_8))
             val hands = input.hands.map { codes -> codes.map { Card.parse(it) ?: fail("Unknown card $it") } }
-            val names = hands.map { if (it.size == 3) TeenPatti.evaluate(it).name else null }
+            val rules = HandRules.of(input.variant, input.jokerRanks)
+            val names = hands.map { if (it.size == 3) TeenPatti.best(it, rules).name else null }
             if (hands.any { it.size != 3 }) {
                 CompareResult(true, names)
             } else {
-                val verdict = TeenPatti.decide(hands.withIndex().associate { it.index to it.value }, input.sideShowAsker)
+                val verdict = TeenPatti.decide(hands.withIndex().associate { it.index to it.value }, input.sideShowAsker, rules)
                 CompareResult(true, names, verdict.winners, verdict.note)
             }
         }.getOrElse { CompareResult(false, error = (it as? GameRuleException)?.message ?: "Couldn't read the cards") }

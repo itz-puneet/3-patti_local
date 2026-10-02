@@ -52,6 +52,7 @@ private fun AppRoot(app: TrackerApp, onMinimize: () -> Unit) {
     val session by app.sessions.active.collectAsState()
     var screen by rememberSaveable { mutableStateOf(Screen.Home) }
     var name by remember { mutableStateOf(app.prefs.playerName) }
+    var vibrateOnTurn by remember { mutableStateOf(app.prefs.vibrateOnTurn) }
     var saved by remember { mutableStateOf(app.sessions.savedTable()) }
     var message by remember { mutableStateOf<String?>(null) }
     val askForNotifications = rememberNotificationPermission()
@@ -70,6 +71,12 @@ private fun AppRoot(app: TrackerApp, onMinimize: () -> Unit) {
             },
             startInTableView = app.prefs.tableView,
             onViewChange = { app.prefs.tableView = it },
+            vibrateOnTurn = vibrateOnTurn,
+            onVibrateChange = {
+                vibrateOnTurn = it
+                app.prefs.vibrateOnTurn = it
+            },
+            onMyTurn = { buzz(app) },
         )
         return
     }

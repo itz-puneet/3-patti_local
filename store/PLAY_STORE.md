@@ -78,6 +78,7 @@ When asked about app signing, let Google manage the app signing key (the default
 > • Show and side show
 > • Not sure who won? Enter the cards and Decide winner names each hand and the winner: trail, pure
 >   sequence, sequence, color, pair or high card
+> • Muflis, AK47 and Joker variants, with jokers worked out for you
 > • The winner deals the next round, so the player after them goes first
 >
 > POKER
@@ -88,6 +89,7 @@ When asked about app signing, let Google manage the app signing key (the default
 > A REAL TABLE ON YOUR SCREEN
 > • Everyone seated round the table in turn order, the pot in the middle
 > • See whose turn it is, who is blind or seen, and what everyone has put in
+> • Your phone vibrates when it's your turn
 >
 > FOR THE HOST
 > • Play for friends without a phone

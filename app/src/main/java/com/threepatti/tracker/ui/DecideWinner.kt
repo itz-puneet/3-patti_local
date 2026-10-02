@@ -27,7 +27,11 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,8 +51,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.threepatti.core.Card
 import com.threepatti.core.GameRuleException
+import com.threepatti.core.HandRules
 import com.threepatti.core.Suit
 import com.threepatti.core.TeenPatti
+import com.threepatti.core.Variant
 import com.threepatti.core.Verdict
 import com.threepatti.core.rankLabel
 
@@ -58,6 +64,11 @@ data class HandSeat(val key: String, val label: String)
 private const val MAX_HANDS = 6
 private val RedSuit = Color(0xFFC62828)
 private val BlackSuit = Color(0xFF1B1B1B)
+private val JokerMark = Color(0xFFC58B00)
+
+// The variant picked last, so the screen opens on it next time (in this run of the app).
+private var lastVariant = Variant.CLASSIC
+private var lastJokerRanks = emptySet<Int>()
 
 @Composable
 fun DecideWinnerDialog(
@@ -91,7 +102,12 @@ fun DecideWinnerContent(
     onDeclare: ((winners: List<String>) -> Unit)?,
     onClose: () -> Unit,
     initialCards: Map<String, List<Card?>> = emptyMap(),
+    initialVariant: Variant? = null,
+    initialJokerRanks: Set<Int>? = null,
 ) {
+    var variant by remember { mutableStateOf(initialVariant ?: lastVariant) }
+    var jokerRanks by remember { mutableStateOf(initialJokerRanks ?: lastJokerRanks) }
+    val rules = HandRules.of(variant, jokerRanks)
     var hands by remember { mutableStateOf(seats) }
     var cards by remember { mutableStateOf(seats.associate { it.key to (initialCards[it.key] ?: List(3) { null }) }) }
     var slot by remember { mutableStateOf(firstEmpty(seats, cards) ?: (0 to 0)) }
@@ -103,10 +119,19 @@ fun DecideWinnerContent(
     val used = cards.flatMap { (key, list) -> list.filterIndexed { i, card -> card != null && !(key == selectedKey && i == slot.second) } }
         .filterNotNull().toSet()
     val complete = hands.all { seat -> cards.getValue(seat.key).all { it != null } }
-    val verdict: Result<Verdict<String>>? = if (complete) {
-        runCatching { TeenPatti.decide(hands.associate { it.key to cards.getValue(it.key).filterNotNull() }, sideShowAsker) }
-    } else {
-        null
+    // Jokers are tried as every card, so work the hands out only when something changes.
+    val verdict: Result<Verdict<String>>? = remember(hands, cards, rules) {
+        if (complete) {
+            runCatching { TeenPatti.decide(hands.associate { it.key to cards.getValue(it.key).filterNotNull() }, sideShowAsker, rules) }
+        } else {
+            null
+        }
+    }
+    // Each hand is named as soon as its own 3 cards are in, before the other hands are complete.
+    val named = remember(cards, rules) {
+        cards.mapValues { (_, list) ->
+            list.takeIf { all -> all.all { it != null } }?.let { runCatching { TeenPatti.best(it.filterNotNull(), rules) }.getOrNull() }
+        }
     }
     val winners = verdict?.getOrNull()?.winners.orEmpty()
 
@@ -128,11 +153,21 @@ fun DecideWinnerContent(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Hint("Tap a card, then pick its rank and suit. The app ranks the hands by 3 Patti rules.")
+            VariantPicker(
+                variant = variant,
+                jokerRanks = jokerRanks,
+                onVariant = {
+                    variant = it
+                    lastVariant = it
+                },
+                onJokerRanks = {
+                    jokerRanks = it
+                    lastJokerRanks = it
+                },
+            )
             hands.forEachIndexed { index, seat ->
                 val list = cards.getValue(seat.key)
-                // Named as soon as its own 3 cards are in, before the other hands are complete.
-                val hand = list.takeIf { cards -> cards.all { it != null } }
-                    ?.let { runCatching { TeenPatti.evaluate(it.filterNotNull()) }.getOrNull() }
+                val hand = named[seat.key]
                 val won = seat.key in winners
                 Card(
                     colors = CardDefaults.cardColors(
@@ -156,7 +191,7 @@ fun DecideWinnerContent(
                         }
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             list.forEachIndexed { i, card ->
-                                CardSlot(card, selected = slot == index to i, onClick = {
+                                CardSlot(card, wild = card != null && card.rank in rules.wildRanks, selected = slot == index to i, onClick = {
                                     slot = index to i
                                     rank = null
                                     suit = null
@@ -182,7 +217,7 @@ fun DecideWinnerContent(
                     slot = firstEmpty(hands, cards) ?: (hands.lastIndex to 0)
                 }) { Text("Add a hand") }
             }
-            VerdictCard(hands, verdict)
+            VerdictCard(hands, verdict, rules.lowestWins)
         }
         Surface(color = MaterialTheme.colorScheme.surfaceContainer, shadowElevation = 8.dp) {
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -229,6 +264,47 @@ fun DecideWinnerContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun VariantPicker(
+    variant: Variant,
+    jokerRanks: Set<Int>,
+    onVariant: (Variant) -> Unit,
+    onJokerRanks: (Set<Int>) -> Unit,
+) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        Variant.entries.forEachIndexed { index, v ->
+            SegmentedButton(
+                selected = v == variant,
+                onClick = { onVariant(v) },
+                shape = SegmentedButtonDefaults.itemShape(index, Variant.entries.size),
+                icon = {},
+            ) { Text(v.label, maxLines = 1) }
+        }
+    }
+    Hint(
+        when {
+            variant == Variant.JOKER && jokerRanks.isEmpty() -> "${variant.description}. Pick the joker rank:"
+            variant == Variant.JOKER -> "${variant.description} (★):"
+            variant == Variant.AK47 -> "${variant.description} (★)."
+            else -> "${variant.description}."
+        },
+    )
+    if (variant == Variant.JOKER) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            (14 downTo 2).forEach { r ->
+                PickerKey(rankLabel(r), selected = r in jokerRanks, enabled = true, color = null) {
+                    onJokerRanks(if (r in jokerRanks) jokerRanks - r else jokerRanks + r)
+                }
+            }
+        }
+    }
+}
+
 private fun firstEmpty(seats: List<HandSeat>, cards: Map<String, List<Card?>>): Pair<Int, Int>? {
     seats.forEachIndexed { index, seat ->
         val i = cards[seat.key]?.indexOfFirst { it == null } ?: -1
@@ -238,7 +314,7 @@ private fun firstEmpty(seats: List<HandSeat>, cards: Map<String, List<Card?>>): 
 }
 
 @Composable
-private fun VerdictCard(seats: List<HandSeat>, verdict: Result<Verdict<String>>?) {
+private fun VerdictCard(seats: List<HandSeat>, verdict: Result<Verdict<String>>?, lowestWins: Boolean) {
     val colors = MaterialTheme.colorScheme
     val result = verdict?.getOrNull()
     val error = (verdict?.exceptionOrNull() as? GameRuleException)?.message
@@ -254,7 +330,11 @@ private fun VerdictCard(seats: List<HandSeat>, verdict: Result<Verdict<String>>?
                 result != null -> {
                     val names = result.winners.map { key -> seats.first { it.key == key }.label }
                     Text(
-                        if (names.size == 1) "${names[0]} wins" else "${names.joinToString(" and ")} tie",
+                        when {
+                            names.size > 1 -> "${names.joinToString(" and ")} tie"
+                            lowestWins -> "${names[0]} wins with the lowest hand"
+                            else -> "${names[0]} wins"
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -268,7 +348,7 @@ private fun VerdictCard(seats: List<HandSeat>, verdict: Result<Verdict<String>>?
 }
 
 @Composable
-private fun CardSlot(card: Card?, selected: Boolean, onClick: () -> Unit) {
+private fun CardSlot(card: Card?, wild: Boolean, selected: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Box(
         Modifier
@@ -289,6 +369,9 @@ private fun CardSlot(card: Card?, selected: Boolean, onClick: () -> Unit) {
                 val ink = if (card.suit.red) RedSuit else BlackSuit
                 Text(rankLabel(card.rank), color = ink, fontWeight = FontWeight.Bold, fontSize = 16.sp, lineHeight = 17.sp)
                 Text(card.suit.symbol, color = ink, fontSize = 16.sp, lineHeight = 17.sp)
+            }
+            if (wild) {
+                Text("★", color = JokerMark, fontSize = 11.sp, modifier = Modifier.align(Alignment.TopEnd).padding(end = 2.dp))
             }
         }
     }

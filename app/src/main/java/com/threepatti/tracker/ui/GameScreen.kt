@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -74,6 +75,9 @@ fun GameScreen(
     onExit: () -> Unit,
     startInTableView: Boolean = true,
     onViewChange: (tableView: Boolean) -> Unit = {},
+    vibrateOnTurn: Boolean = false,
+    onVibrateChange: (Boolean) -> Unit = {},
+    onMyTurn: () -> Unit = {},
 ) {
     val state by session.state.collectAsState()
     val myId by session.myPlayerId.collectAsState()
@@ -102,12 +106,26 @@ fun GameScreen(
         }
     }
 
+    // Buzz when this player's turn starts, or they're asked for a side show. The key changes with the street
+    // too, so a turn that comes straight back on the next poker street buzzes again.
+    val round = state?.round
+    val turnKey = round?.takeIf {
+        it.isActive && ((it.phase == RoundPhase.BETTING && it.turnId == myId) ||
+            (it.phase == RoundPhase.SIDE_SHOW_REQUESTED && it.sideShow?.targetId == myId))
+    }?.let { Triple(it.number, it.street, it.phase) }
+    LaunchedEffect(turnKey) {
+        if (turnKey != null && vibrateOnTurn) onMyTurn()
+    }
+
     val current = state
     val me = myId
     if (current == null || me == null) {
         ConnectingScreen(session.hostAddress, connection, onCancel = onExit)
     } else {
-        GameContent(session, current, me, connection, canUndo, snackbar, onExit, startInTableView, onViewChange)
+        GameContent(
+            session, current, me, connection, canUndo, snackbar, onExit,
+            startInTableView, onViewChange, vibrateOnTurn, onVibrateChange,
+        )
     }
 
     val closed = connection as? ConnectionStatus.Closed
@@ -132,6 +150,8 @@ private fun GameContent(
     onExit: () -> Unit,
     startInTableView: Boolean,
     onViewChange: (tableView: Boolean) -> Unit,
+    vibrateOnTurn: Boolean,
+    onVibrateChange: (Boolean) -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var tableView by rememberSaveable { mutableStateOf(startInTableView) }
@@ -147,6 +167,8 @@ private fun GameContent(
                 canUndo = canUndo,
                 onUndo = { dialog = GameDialog.ConfirmUndo },
                 onOpen = { dialog = it },
+                vibrateOnTurn = vibrateOnTurn,
+                onToggleVibrate = { onVibrateChange(!vibrateOnTurn) },
             )
         },
         bottomBar = {
@@ -212,6 +234,8 @@ private fun GameTopBar(
     canUndo: Boolean,
     onUndo: () -> Unit,
     onOpen: (GameDialog) -> Unit,
+    vibrateOnTurn: Boolean,
+    onToggleVibrate: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val round = state.round
@@ -266,6 +290,11 @@ private fun GameTopBar(
                     if (!state.settings.isPoker) item("Which hand wins?", true, GameDialog.HandChecker)
                     item("Leave table", true, GameDialog.LeaveTable)
                 }
+                DropdownMenuItem(
+                    text = { Text("Vibrate on my turn") },
+                    trailingIcon = { Checkbox(checked = vibrateOnTurn, onCheckedChange = null) },
+                    onClick = onToggleVibrate,
+                )
             }
         },
     )
