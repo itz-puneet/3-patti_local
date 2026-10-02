@@ -2,12 +2,14 @@ package com.threepatti.core
 
 import com.threepatti.core.GameAction.AddPlayer
 import com.threepatti.core.GameAction.AdjustChips
+import com.threepatti.core.GameAction.AllIn
 import com.threepatti.core.GameAction.AnswerSideShow
 import com.threepatti.core.GameAction.Bet
 import com.threepatti.core.GameAction.Call
 import com.threepatti.core.GameAction.CancelRound
 import com.threepatti.core.GameAction.Check
 import com.threepatti.core.GameAction.DeclareWinners
+import com.threepatti.core.GameAction.EnterCards
 import com.threepatti.core.GameAction.ForceShow
 import com.threepatti.core.GameAction.MoveSeat
 import com.threepatti.core.GameAction.Pack
@@ -46,7 +48,7 @@ object GameEngine {
         return GameState(tableName = title, settings = settings, players = listOf(host), nextPlayerNumber = 2)
             .withLog(
                 "$name opened a ${settings.gameName()} table (${settings.summary()}). " +
-                    "Everyone starts with ${formatMoney(settings.startingBalance, settings.currency)}",
+                    "Everyone starts with ${formatChipCount(settings.startingBalance)}",
             )
     }
 
@@ -113,12 +115,27 @@ object GameEngine {
         val results = current.results.mapIndexed { i, r -> if (i >= previous.results.size) r.copy(undone = true) else r }
         return previous.copy(
             players = restored + joinedSince,
+            round = previous.round?.let { keepEnteredCards(it, current.round) },
             log = log,
             results = results,
             undoCount = current.undoCount + 1,
             nextPlayerNumber = maxOf(previous.nextPlayerNumber, current.nextPlayerNumber),
             version = current.version + 1,
-        ).withLog(if (undoneText != null) "Host undid: $undoneText" else "Host undid the last change", LogKind.UNDO)
+        ).withSuggestion()
+            .withLog(if (undoneText != null) "Host undid: $undoneText" else "Host undid the last change", LogKind.UNDO)
+    }
+
+    /**
+     * The cards players entered are what's in their hands, so undo keeps them, and cards that were shown
+     * stay shown.
+     */
+    private fun keepEnteredCards(previous: Round, current: Round?): Round {
+        if (current == null || current.number != previous.number) return previous
+        return previous.copy(
+            hands = previous.hands.map { hand ->
+                current.hand(hand.playerId)?.let { hand.copy(cards = it.cards, cardsShown = it.cardsShown) } ?: hand
+            },
+        )
     }
 
     fun apply(state: GameState, action: GameAction, actor: Actor = Actor.Host): GameState {
@@ -130,6 +147,8 @@ object GameEngine {
             is Show -> teenPattiOnly(poker) { show(state, action.playerId) }
             is RequestSideShow -> teenPattiOnly(poker) { requestSideShow(state, action.playerId) }
             is AnswerSideShow -> teenPattiOnly(poker) { answerSideShow(state, action.playerId, action.accept) }
+            is AllIn -> teenPattiOnly(poker) { allIn(state, action.playerId) }
+            is EnterCards -> teenPattiOnly(poker) { enterCards(state, action.playerId, action.cards) }
             is Check -> pokerOnly(poker) { PokerEngine.check(state, action.playerId) }
             is Call -> pokerOnly(poker) { PokerEngine.call(state, action.playerId) }
             is RaiseTo -> pokerOnly(poker) { PokerEngine.raiseTo(state, action.playerId, action.amount) }
@@ -147,7 +166,7 @@ object GameEngine {
             is MoveSeat -> moveSeat(state, action.playerId, action.offset)
             is UpdateSettings -> updateSettings(state, action.settings)
         }
-        return next.bumped()
+        return next.withSuggestion().bumped()
     }
 
     private inline fun teenPattiOnly(poker: Boolean, move: () -> GameState): GameState =
@@ -169,7 +188,7 @@ object GameEngine {
         if (state.isRoundActive) fail("Finish the current round first")
         val boot = state.settings.bootAmount
         val eligible = roundPlayers(state)
-        if (eligible.size < 2) fail("Need at least 2 players with ${state.money(boot)} or more to start a round")
+        if (eligible.size < 2) fail("Need at least 2 players with ${state.chipCount(boot)} or more to start a round")
         val eligibleIds = eligible.map { it.id }.toSet()
         val dealerId = pickDealer(state, eligibleIds)
         val hands = eligible.map { Hand(playerId = it.id, status = HandStatus.BLIND, invested = boot) }
@@ -184,23 +203,30 @@ object GameEngine {
             turnId = null,
             phase = RoundPhase.BETTING,
         )
-        val round = draft.copy(turnId = Rules.nextActive(draft, dealerId)?.playerId)
+        // A player whose last chips pay the boot is all in from the start.
+        val broke = eligible.filter { it.balance == boot }.map { it.id }
+        val dealt = draft.copy(
+            hands = draft.hands.map { if (it.playerId in broke) it.copy(allIn = true) else it },
+            allInBreaks = if (broke.isEmpty()) emptyList() else listOf(AllInBreak(draft.pot, broke)),
+        )
+        val round = dealt.copy(turnId = Rules.nextToAct(dealt, dealerId)?.playerId)
+        val first = round.turnId?.let { ", ${state.nameOf(it)} goes first" }.orEmpty()
         var next = state.copy(
             players = state.players.map { if (it.id in eligibleIds) it.copy(balance = it.balance - boot) else it },
             round = round,
             lastDealerId = dealerId,
-        ).withLog(
-            "Round $number started. ${state.nameOf(dealerId)} deals, ${state.nameOf(round.turnId)} goes first. " +
-                "Boot ${state.money(boot)} from ${hands.size} players",
-        )
+        ).withLog("Round $number started. ${state.nameOf(dealerId)} deals$first. Boot ${state.chips(boot)} from ${hands.size} players")
+        if (broke.isNotEmpty()) {
+            next = next.withLog("${state.namesOf(broke)} ${if (broke.size == 1) "is" else "are"} all in with the boot")
+        }
         val short = state.players.filter { !it.sittingOut && it.balance < boot }
         if (short.isNotEmpty()) {
             next = next.withLog("${short.joinToString { it.name }} can't pay the boot and sit out this round")
         }
-        if (Rules.potLimitReached(next.settings, round)) {
-            next = showdownAll(next, "Pot limit reached. Everyone must show")
+        return when {
+            Rules.potLimitReached(next.settings, round) -> showdownAll(next, "Pot limit reached. Everyone must show")
+            else -> showdownIfAllIn(next) ?: next
         }
-        return next
     }
 
     private fun seeCards(state: GameState, playerId: String): GameState {
@@ -226,9 +252,46 @@ object GameEngine {
         val kind = if (blind) "blind" else "chaal"
         val name = state.nameOf(playerId)
         next = next.withLog(
-            if (raise) "$name raised, $kind ${state.money(amount)}" else "$name played $kind ${state.money(amount)}",
+            if (raise) "$name raised, $kind ${state.chips(amount)}" else "$name played $kind ${state.chips(amount)}",
         )
+        return afterPayment(allInIfBroke(next, playerId), playerId)
+    }
+
+    /** For a player whose chips don't cover the blind or chaal: they put in what's left and stay in. */
+    private fun allIn(state: GameState, playerId: String): GameState {
+        Rules.allInError(state, playerId)?.let { fail(it) }
+        val amount = state.player(playerId)!!.balance
+        val next = markAllIn(state.pay(playerId, amount), playerId)
+            .withLog("${state.nameOf(playerId)} is all in with ${state.chipCount(amount)}")
         return afterPayment(next, playerId)
+    }
+
+    /** Paying the last chip makes a player all in: they stay in the round but bet no more. */
+    private fun allInIfBroke(state: GameState, playerId: String): GameState {
+        if (state.player(playerId)!!.balance > 0 || state.round!!.hand(playerId)!!.allIn) return state
+        return markAllIn(state, playerId).withLog("${state.nameOf(playerId)} is all in")
+    }
+
+    /** The pot so far stays winnable for this player; what others bet from now on goes to a side pot. */
+    private fun markAllIn(state: GameState, playerId: String): GameState =
+        state.updateHand(playerId) { it.copy(allIn = true) }.updateRound { round ->
+            val last = round.allInBreaks.lastOrNull()
+            if (last != null && last.potAt == round.pot) {
+                round.copy(allInBreaks = round.allInBreaks.dropLast(1) + last.copy(playerIds = last.playerIds + playerId))
+            } else {
+                round.copy(allInBreaks = round.allInBreaks + AllInBreak(round.pot, listOf(playerId)))
+            }
+        }
+
+    /** A player's own cards, kept private until a side show or show. They can't change once shown. */
+    private fun enterCards(state: GameState, playerId: String, codes: List<String>): GameState {
+        Rules.enterCardsError(state, playerId)?.let { fail(it) }
+        // Cards entered while they're on show count as shown straight away.
+        val showingNow = playerId in Rules.showingCards(state.round!!)
+        val cards = codes.map { Card.parse(it) ?: fail("Unknown card $it") }
+        if (cards.size != 3) fail("Enter 3 cards")
+        if (cards.toSet().size != 3) fail("${cards.first { c -> cards.count { it == c } > 1 }.label} is entered twice")
+        return state.updateHand(playerId) { it.copy(cards = cards.map { c -> c.code }, cardsShown = it.cardsShown || showingNow) }
     }
 
     private fun pack(state: GameState, playerId: String): GameState {
@@ -240,6 +303,7 @@ object GameEngine {
         var next = state.updateHand(playerId) { it.copy(status = HandStatus.PACKED) }.withLog("$name packed")
         val active = next.round!!.activeHands
         if (active.size == 1) return finishRound(next, listOf(active.single().playerId))
+        showdownIfAllIn(next)?.let { return it }
         if (round.turnId == playerId) next = advanceTurn(next, playerId)
         return next
     }
@@ -249,11 +313,9 @@ object GameEngine {
         val round = state.round!!
         val amount = Rules.callAmount(round, round.hand(playerId)!!)
         val opponent = round.activeHands.first { it.playerId != playerId }
-        return state.pay(playerId, amount)
-            .withLog("${state.nameOf(playerId)} paid ${state.money(amount)} and asked ${state.nameOf(opponent.playerId)} for a show")
-            .updateRound {
-                it.copy(phase = RoundPhase.SHOWDOWN, turnId = null, showdownIds = it.activeHands.map { h -> h.playerId })
-            }
+        val next = state.pay(playerId, amount)
+            .withLog("${state.nameOf(playerId)} paid ${state.chipCount(amount)} and asked ${state.nameOf(opponent.playerId)} for a show")
+        return toShowdown(allInIfBroke(next, playerId))
     }
 
     private fun requestSideShow(state: GameState, playerId: String): GameState {
@@ -262,7 +324,8 @@ object GameEngine {
         val target = Rules.previousActive(round, playerId)!!
         val amount = round.stake * 2
         val next = state.pay(playerId, amount)
-            .withLog("${state.nameOf(playerId)} paid ${state.money(amount)} and asked ${state.nameOf(target.playerId)} for a side show")
+            .withLog("${state.nameOf(playerId)} paid ${state.chipCount(amount)} and asked ${state.nameOf(target.playerId)} for a side show")
+            .let { allInIfBroke(it, playerId) }
         if (Rules.potLimitReached(next.settings, next.round!!)) {
             return showdownAll(next, "Pot limit reached. Everyone still playing must show")
         }
@@ -279,6 +342,7 @@ object GameEngine {
         val name = state.nameOf(playerId)
         return if (accept) {
             state.updateRound { it.copy(phase = RoundPhase.SIDE_SHOW_COMPARE) }
+                .let { shown(it, listOf(sideShow.requesterId, sideShow.targetId)) }
                 .withLog("$name accepted the side show with ${state.nameOf(sideShow.requesterId)}")
         } else {
             val next = state.updateRound { it.copy(phase = RoundPhase.BETTING, sideShow = null) }
@@ -307,10 +371,12 @@ object GameEngine {
                 if (active.size == 1) {
                     finishRound(next, listOf(active.single().playerId))
                 } else {
-                    advanceTurn(next, sideShow.requesterId)
+                    showdownIfAllIn(next) ?: advanceTurn(next, sideShow.requesterId)
                 }
             }
             RoundPhase.SHOWDOWN -> {
+                // After an all-in the host decides the main pot and each side pot in turn.
+                if (round.pots.isNotEmpty()) return PokerEngine.declarePotWinners(state, winnerIds)
                 if (winnerIds.isEmpty()) fail("Pick the winner")
                 if (winnerIds.toSet().size != winnerIds.size) fail("A player was picked twice")
                 winnerIds.firstOrNull { it !in round.showdownIds }?.let { fail("${state.nameOf(it)} is not part of this show") }
@@ -329,7 +395,9 @@ object GameEngine {
         val eligible = roundPlayers(state).map { it.id }
         if (eligible.size < 2) return null
         val dealerId = pickDealer(state, eligible.toSet())
-        return dealerId to eligible[(eligible.indexOf(dealerId) + 1) % eligible.size]
+        val after = (1..eligible.size).map { eligible[(eligible.indexOf(dealerId) + it) % eligible.size] }
+        val canBet = after.firstOrNull { (state.player(it)?.balance ?: 0) > state.settings.bootAmount }
+        return dealerId to (canBet ?: after.first())
     }
 
     private fun roundPlayers(state: GameState): List<Player> =
@@ -372,23 +440,47 @@ object GameEngine {
         if (Rules.potLimitReached(state.settings, state.round!!)) {
             showdownAll(state, "Pot limit reached. Everyone still playing must show")
         } else {
-            advanceTurn(state, playerId)
+            showdownIfAllIn(state) ?: advanceTurn(state, playerId)
         }
 
     private fun advanceTurn(state: GameState, fromId: String): GameState {
-        val next = Rules.nextActive(state.round!!, fromId)
+        val next = Rules.nextToAct(state.round!!, fromId)
         return state.updateRound { it.copy(turnId = next?.playerId) }
     }
 
-    private fun showdownAll(state: GameState, message: String): GameState =
-        state.updateRound {
+    /** With someone all in and at most one player left who can bet, there's nothing to bet on: everyone shows. */
+    private fun showdownIfAllIn(state: GameState): GameState? {
+        val round = state.round!!
+        val active = round.activeHands
+        if (round.phase != RoundPhase.BETTING || active.size < 2 || active.none { it.allIn }) return null
+        if (active.count { !it.allIn } > 1) return null
+        return showdownAll(state, "No one else can bet, so everyone still playing shows")
+    }
+
+    private fun showdownAll(state: GameState, message: String): GameState = toShowdown(state.withLog(message))
+
+    /**
+     * Everyone still in shows their cards, which also shows any cards they entered. After an all-in the
+     * pot is split into a main pot and side pots, decided one by one.
+     */
+    private fun toShowdown(state: GameState): GameState {
+        val next = shown(state, state.round!!.activeHands.map { it.playerId }).updateRound {
             it.copy(
                 phase = RoundPhase.SHOWDOWN,
                 turnId = null,
                 sideShow = null,
                 showdownIds = it.activeHands.map { h -> h.playerId },
+                pots = Rules.sidePots(it).takeIf { pots -> pots.size > 1 }.orEmpty(),
+                potWinners = emptyList(),
             )
-        }.withLog(message)
+        }
+        return if (next.round!!.pots.isEmpty()) next else PokerEngine.awardUncontested(next)
+    }
+
+    /** These players' entered cards have been shown, so they can't be changed any more. */
+    private fun shown(state: GameState, playerIds: List<String>): GameState = state.updateRound { round ->
+        round.copy(hands = round.hands.map { if (it.playerId in playerIds && it.cards.isNotEmpty()) it.copy(cardsShown = true) else it })
+    }
 
     private fun finishRound(state: GameState, winnerIds: List<String>): GameState {
         val round = state.round!!
@@ -402,9 +494,9 @@ object GameEngine {
         val names = ordered.map { state.nameOf(it) }
         val result = RoundResult(round.number, round.pot, ordered, names, changes)
         val text = if (ordered.size == 1) {
-            "${names.single()} won the pot of ${state.money(round.pot)}"
+            "${names.single()} won the pot of ${state.chipCount(round.pot)}"
         } else {
-            "Pot of ${state.money(round.pot)} split between ${names.joinToString(" and ")}"
+            "Pot of ${state.chipCount(round.pot)} split between ${names.joinToString(" and ")}"
         }
         return state.copy(
             players = players,
@@ -447,7 +539,7 @@ object GameEngine {
         if (player.isHost) fail("The host can't be removed")
         if (state.round?.let { it.isActive && it.hand(playerId) != null } == true) fail("${player.name} is playing this ${state.roundWord}")
         if (player.net != 0) {
-            fail("${player.name} is at ${formatSignedMoney(player.net, state.settings.currency)}. Settle up first, or let them sit out")
+            fail("${player.name} is at ${formatSignedChips(player.net)}. Even out their chips first, or let them sit out")
         }
         return state.copy(players = state.players.filter { it.id != playerId })
             .withLog("${player.name} was removed from the table")
@@ -465,13 +557,13 @@ object GameEngine {
     private fun adjustChips(state: GameState, playerId: String, amount: Int): GameState {
         val player = state.player(playerId) ?: fail("Player not found")
         if (amount == 0) fail("Enter an amount")
-        if (player.balance + amount < 0) fail("${player.name} has only ${state.money(player.balance)}")
+        if (player.balance + amount < 0) fail("${player.name} has only ${state.chipCount(player.balance)}")
         return state.updatePlayer(playerId) { it.copy(balance = it.balance + amount, buyIn = it.buyIn + amount) }
             .withLog(
                 if (amount > 0) {
-                    "${player.name} bought ${state.money(amount)} more chips"
+                    "${player.name} took ${state.chips(amount)} more chips"
                 } else {
-                    "${player.name} cashed out ${state.money(-amount)}"
+                    "${player.name} gave back ${state.chipCount(-amount)}"
                 },
             )
     }

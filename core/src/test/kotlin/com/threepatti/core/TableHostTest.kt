@@ -39,14 +39,14 @@ class TableHostTest {
         assertNull(host.perform(Bet(ravi)))
         val meena = host.join("device-meena", "Meena")
         assertTrue(host.canUndo.value)
-        assertEquals("Ravi played blind ₹5", host.nextUndo.value)
+        assertEquals("Ravi played blind 5", host.nextUndo.value)
 
         assertNull(host.undo())
         val afterUndo = host.state.value
         assertEquals(245, afterUndo.player(ravi)!!.balance)
         assertTrue(afterUndo.player(ravi)!!.connected)
         assertEquals(250, afterUndo.player(meena)!!.balance, "phone that joined later keeps its seat")
-        assertEquals(LogEntry(afterUndo.log.last().seq, "Host undid: Ravi played blind ₹5", LogKind.UNDO), afterUndo.log.last())
+        assertEquals(LogEntry(afterUndo.log.last().seq, "Host undid: Ravi played blind 5", LogKind.UNDO), afterUndo.log.last())
 
         assertEquals("Nothing to undo. Once a round starts, earlier rounds are final", host.undo())
         assertEquals(host.state.value, saved.last().state)
@@ -70,7 +70,7 @@ class TableHostTest {
         assertEquals(2, s.undoCount)
         assertTrue(s.log.map { it.text }.containsAll(logBefore.map { it.text }), "every line is still there")
         val undone = s.log.filter { it.undone }.map { it.text }
-        assertEquals(listOf("Host called a show for everyone still playing", "Ravi won the pot of ₹15"), undone)
+        assertEquals(listOf("Host called a show for everyone still playing", "Ravi won the pot of 15 chips"), undone)
         assertEquals(2, s.log.count { it.kind == LogKind.UNDO })
         assertFalse(s.log.any { it.kind == LogKind.UNDO && it.undone })
         assertFalse(s.log.any { it.kind == LogKind.SEAT && it.undone }, "joining is never marked undone")
@@ -164,9 +164,58 @@ class TableHostTest {
     fun rejectedActionsReturnMessageAndChangeNothing() {
         val host = host()
         val before = host.state.value
-        assertEquals("Need at least 2 players with ₹5 or more to start a round", host.perform(StartRound))
+        assertEquals("Need at least 2 players with 5 chips or more to start a round", host.perform(StartRound))
         assertEquals(before, host.state.value)
         assertFalse(host.canUndo.value)
+    }
+
+    @Test
+    fun enteredCardsAreNotUndoneAndStayPrivateOnTheHostsScreen() {
+        val host = host()
+        val ravi = host.join("device-ravi", "Ravi")
+        assertNull(host.perform(AddPlayer("Dadi")))
+        val dadi = host.state.value.players.last().id
+        assertNull(host.perform(StartRound))
+        assertNull(host.perform(Bet(ravi)))
+        assertNull(host.perform(GameAction.SeeCards(ravi)))
+        assertNull(host.perform(GameAction.EnterCards(ravi, listOf("AS", "KS", "QS"))))
+        assertEquals("Ravi saw their cards", host.nextUndo.value, "entering cards is not a move")
+        assertNull(host.perform(GameAction.SeeCards(dadi)))
+        assertNull(host.perform(GameAction.EnterCards(dadi, listOf("2C", "2D", "9H"))))
+
+        // The host typed Dadi's cards in, but Ravi's stay on Ravi's phone.
+        val seen = host.hostView.value.round!!
+        assertEquals(emptyList(), seen.hand(ravi)!!.cards)
+        assertEquals(listOf("2C", "2D", "9H"), seen.hand(dadi)!!.cards)
+        assertEquals(listOf("AS", "KS", "QS"), host.state.value.round!!.hand(ravi)!!.cards)
+
+        repeat(3) { assertNull(host.undo()) }
+        val round = host.state.value.round!!
+        assertEquals(HandStatus.BLIND, round.hand(ravi)!!.status)
+        assertEquals(245, host.state.value.player(ravi)!!.balance)
+        assertEquals(listOf("AS", "KS", "QS"), round.hand(ravi)!!.cards, "undo keeps the cards in their hands")
+        assertEquals(listOf("2C", "2D", "9H"), round.hand(dadi)!!.cards)
+    }
+
+    @Test
+    fun cardsShownInAnUndoneSideShowStayLocked() {
+        val host = host()
+        val ravi = host.join("device-ravi", "Ravi")
+        val meena = host.join("device-meena", "Meena")
+        assertNull(host.perform(StartRound))
+        for (action in listOf(
+            GameAction.SeeCards(ravi), GameAction.EnterCards(ravi, listOf("AS", "KD", "9C")), Bet(ravi),
+            GameAction.SeeCards(meena), GameAction.EnterCards(meena, listOf("QS", "QH", "4D")), GameAction.RequestSideShow(meena),
+            GameAction.AnswerSideShow(ravi, true),
+        )) {
+            assertNull(host.perform(action))
+        }
+        assertEquals(listOf(meena), host.state.value.round!!.suggestedWinnerIds)
+        assertNull(host.undo())
+        val round = host.state.value.round!!
+        assertEquals(RoundPhase.SIDE_SHOW_REQUESTED, round.phase)
+        assertTrue(round.suggestedWinnerIds.isEmpty())
+        assertEquals("Ravi's cards were shown, so they can't change", host.perform(GameAction.EnterCards(ravi, listOf("AH", "AD", "AC"))))
     }
 
     @Test
@@ -185,6 +234,8 @@ class TableHostTest {
             GameAction.DeclareWinners(listOf(ravi)), GameAction.ForceShow, GameAction.CancelRound, AddPlayer("X"),
             GameAction.RemovePlayer(ravi), GameAction.RenamePlayer(ravi, "R"), GameAction.AdjustChips(ravi, -5),
             GameAction.SetSittingOut(ravi, true), GameAction.MoveSeat(ravi, 1), GameAction.UpdateSettings(TableSettings()),
+            GameAction.AllIn(ravi), GameAction.EnterCards(ravi, listOf("AS", "10H", "2C")),
+            GameAction.UpdateSettings(TableSettings(variant = Variant.JOKER, jokerRanks = setOf(7, 14))),
         )
         for (action in actions) {
             val line = Wire.encode(ClientMessage.Act(action))

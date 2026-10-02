@@ -189,6 +189,23 @@ h2 { font-size: 17px; margin: 8px 0 0; }
 .verdict.err { background: var(--error-c); color: var(--on-error-c); }
 .verdict .big { font-size: 17px; font-weight: 700; }
 
+/* Cards players entered */
+.mini { display: inline-flex; gap: 2px; vertical-align: middle; }
+.mc { position: relative; width: 22px; height: 30px; border-radius: 4px; background: #fff; color: #1B1B1B; border: 1px solid rgba(0,0,0,.25);
+  font-size: 11px; font-weight: 700; line-height: 1.15; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; }
+.mc.red { color: #C62828; }
+.mc i { position: absolute; top: -1px; right: 1px; font-size: 8px; font-style: normal; color: #C58B00; }
+.seat .mini { margin-top: 3px; }
+.tbl.compact .seat .mc { width: 18px; height: 25px; font-size: 9px; }
+.hhead { display: flex; align-items: center; gap: 8px; }
+.hhead > div:first-child { flex: 1; min-width: 0; }
+.mycards { background: transparent; padding: 4px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 14px; }
+.shown { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.suggest { border-radius: 12px; padding: 8px 12px; background: var(--card-2); font-size: 13px; display: flex; flex-direction: column; gap: 2px; }
+.suggest.done { background: var(--primary-c); color: var(--on-primary-c); }
+.suggest .big { font-size: 15px; font-weight: 700; }
+.slots.mid { justify-content: center; }
+
 /* Dialog and toast */
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 10; }
 .dialog { background: var(--bg); border-radius: 24px; padding: 22px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; }
@@ -241,9 +258,10 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
-  function cur() { return data ? data.state.settings.currency : "₹"; }
-  function money(n) { return (n < 0 ? "-" : "") + cur() + Math.abs(n); }
-  function signed(n) { return n > 0 ? "+" + cur() + n : n < 0 ? "-" + cur() + (-n) : cur() + "0"; }
+  // The app counts chips, never money: amounts are plain numbers.
+  function chips(n) { return String(n); }
+  function chipCount(n) { return n + (Math.abs(n) === 1 ? " chip" : " chips"); }
+  function signed(n) { return n > 0 ? "+" + n : String(n); }
   function netClass(n) { return n > 0 ? "pos" : n < 0 ? "neg" : "muted"; }
   function player(s, id) { for (var i = 0; i < s.players.length; i++) if (s.players[i].id === id) return s.players[i]; return null; }
   function nameOf(s, id) { var p = player(s, id); return p ? p.name : "Former player"; }
@@ -252,6 +270,33 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   function isActive(r) { return r && r.phase !== "FINISHED"; }
   function isPoker(s) { return s.settings.game === "POKER"; }
   function word(s) { return isPoker(s) ? "hand" : "round"; }
+  // 3 Patti cards players entered, such as "10H". Only their own phone gets them until a side show or show.
+  function parseCard(code) {
+    var r = code.slice(0, -1);
+    return { r: { A: 14, K: 13, Q: 12, J: 11 }[r] || parseInt(r, 10), s: code.slice(-1) };
+  }
+  function suitSymbol(su) { return { S: "♠", H: "♥", D: "♦", C: "♣" }[su]; }
+  function tableWild(set) { return set.variant === "AK47" ? [14, 13, 4, 7] : set.variant === "JOKER" ? set.jokerRanks || [] : []; }
+  function miniHand(codes, wild) {
+    return '<span class="mini">' + codes.map(function (code) {
+      var c = parseCard(code);
+      return '<span class="mc' + (isRed(c.s) ? " red" : "") + '">' + rankText(c.r) + "<br>" + suitSymbol(c.s) +
+        (wild.indexOf(c.r) >= 0 ? "<i>★</i>" : "") + "</span>";
+    }).join("") + "</span>";
+  }
+  // Players whose cards are on show: the two in a side show (to each other), or everyone in a show.
+  function showingIds(r) {
+    if (!r) return [];
+    if (r.phase === "SIDE_SHOW_COMPARE" && r.sideShow) return [r.sideShow.requesterId, r.sideShow.targetId];
+    return r.phase === "SHOWDOWN" || r.phase === "FINISHED" ? r.showdownIds : [];
+  }
+  // The players whose hands decide what the host enters now: the side show pair, or the pot being decided.
+  function comparedIds(r) {
+    if (r.phase === "SIDE_SHOW_COMPARE") return showingIds(r);
+    if (r.phase !== "SHOWDOWN") return [];
+    var pot = r.pots[r.potWinners.length];
+    return pot ? pot.eligibleIds : r.showdownIds;
+  }
   function btn(label, act, cls, extra, disabled) {
     return '<button class="btn ' + (cls || "") + '" data-act="' + act + '"' + (extra || "") +
       (disabled || busy ? " disabled" : "") + ">" + label + "</button>";
@@ -262,6 +307,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   // Buzz when this player's turn starts, or they're asked for a side show. iPhones don't let pages vibrate.
   var canVibrate = typeof navigator.vibrate === "function";
   var vibrateOn = store.get("vibrate") !== "off";
+  // Open the card picker when this player sees their cards.
+  var askCards = store.get("askCards") !== "off";
   // Changes with the street too, so a turn that comes straight back on the next poker street buzzes again.
   function turnKey(u) {
     var r = u && u.state.round;
@@ -286,6 +333,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       }
       var key = turnKey(fresh);
       if (key && key !== turnKey(data) && vibrateOn && canVibrate) navigator.vibrate([180, 120, 180]);
+      var fr = fresh.state.round;
+      if (dialog && dialog.kind === "mycards" && !(isActive(fr) && fr.number === dialog.round)) closeDialog();
       data = fresh;
       status = "live";
       store.set("joined", "1");
@@ -490,20 +539,27 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     var next = u.nextDealText ? '<div class="next">' + esc(u.nextDealText) + "</div>" : "";
     if (!r) {
       return '<div class="what">' + (isPoker(s) ? "No hand being played" : "No round running") + '</div><div class="dim">' +
-        "Everyone starts with " + money(s.settings.startingBalance) + "</div>" + next;
+        "Everyone starts with " + chipCount(s.settings.startingBalance) + "</div>" + next;
     }
-    var W = word(s).toUpperCase(), pot = money(r.pot);
+    var W = word(s).toUpperCase(), pot = chips(r.pot);
     var html = '<div class="label">' + (isActive(r) ? W + " " + r.number + " · POT" : W + " " + r.number + " FINISHED") + "</div>" +
       '<div class="amount' + (pot.length > 7 ? " xl" : pot.length > 5 ? " l" : "") + '">' + pot + "</div>";
-    if (isActive(r)) {
-      var stakes = isPoker(s) ? ["Blinds " + money(s.settings.smallBlind) + "/" + money(s.settings.bigBlind)]
-        .concat(s.settings.ante > 0 ? ["Ante " + money(s.settings.ante)] : [])
-        .concat(r.phase === "BETTING" ? ["Bet " + money(r.currentBet)] : []) :
-        ["Blind " + money(r.stake), "Chaal " + money(r.stake * 2)];
+    // Stakes only matter while players are betting.
+    if (r.phase === "BETTING" || r.phase === "SIDE_SHOW_REQUESTED") {
+      var stakes = isPoker(s) ? ["Blinds " + chips(s.settings.smallBlind) + "/" + chips(s.settings.bigBlind)]
+        .concat(s.settings.ante > 0 ? ["Ante " + chips(s.settings.ante)] : [])
+        .concat(r.phase === "BETTING" ? ["Bet " + chips(r.currentBet)] : []) :
+        ["Blind " + chips(r.stake), "Chaal " + chips(r.stake * 2)];
       // Each stake wraps as a whole, so a line never ends in a separator.
       html += '<div class="dim">' + stakes.map(function (t) { return '<span class="st">' + t + "</span>"; }).join("") + "</div>";
     }
-    return html + '<div class="what">' + esc(u.roundText) + "</div>" + (isActive(r) ? "" : next);
+    // During a 3 Patti show the panel says who is in it, so the felt keeps it short.
+    var what = u.roundText;
+    if (!isPoker(s) && r.phase === "SHOWDOWN" && !r.pots.length) what = "Show";
+    if (!isPoker(s) && r.phase === "SIDE_SHOW_COMPARE" && r.sideShow) {
+      what = "Side show: " + nameOf(s, r.sideShow.requesterId) + " vs " + nameOf(s, r.sideShow.targetId);
+    }
+    return html + '<div class="what">' + esc(what) + "</div>" + (isActive(r) ? "" : next);
   }
 
   function seat(u, p, x, y) {
@@ -515,8 +571,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     // The status, with the chips put in this round while it runs.
     var st = status0(s, p), label = st[0];
     if (isActive(r) && h && h.status !== "PACKED") {
-      if (!isPoker(s)) label += " · " + money(h.invested);
-      else if (h.streetBet > 0) label = (h.allIn ? "All-in " : "Bet ") + money(h.streetBet);
+      if (!isPoker(s)) label += " · " + chips(h.invested);
+      else if (h.streetBet > 0) label = (h.allIn ? "All-in " : "Bet ") + chips(h.streetBet);
     }
     var blind = isActive(r) && isPoker(s) ? (r.smallBlindId === p.id ? "SB" : r.bigBlindId === p.id ? "BB" : "") : "";
     return '<div class="seat' + (turn ? " turn" : "") + (mine ? " mine" : "") + (out ? " out" : "") + (won ? " won" : "") +
@@ -525,8 +581,10 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       (isActive(r) && r.dealerId === p.id ? '<span class="mk d">D</span>' : "") +
       (blind ? '<span class="mk bl">' + blind + "</span>" : "") +
       (!p.isHost && p.hasDevice && !p.connected ? '<span class="dot"></span>' : "") + "</div>" +
-      '<div class="nm"><div class="n">' + (mine ? "You" : esc(p.name)) + '</div><div class="b">' + money(p.balance) + "</div></div>" +
-      '<span class="pill ' + st[1] + '">' + esc(label) + "</span></div>";
+      '<div class="nm"><div class="n">' + (mine ? "You" : esc(p.name)) + '</div><div class="b">' + chips(p.balance) + "</div></div>" +
+      // Cards on show to this player (a side show they're in, or a show) take the place of the status.
+      (h && h.cards.length === 3 && showingIds(r).indexOf(p.id) >= 0 ? miniHand(h.cards, tableWild(s.settings)) :
+        '<span class="pill ' + st[1] + '">' + esc(label) + "</span>") + "</div>";
   }
 
   function listView(u) {
@@ -534,18 +592,18 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     var next = u.nextDealText ? '<div class="next-deal">' + esc(u.nextDealText) + "</div>" : "";
     if (!r) {
       html += '<div class="what">' + (isPoker(s) ? "No hand being played" : "No round running") +
-        "</div><div>Everyone starts with " + money(s.settings.startingBalance) +
+        "</div><div>Everyone starts with " + chipCount(s.settings.startingBalance) +
         '</div><div class="small">' + esc(u.rulesSummary) + "</div>" + next;
     } else {
       var W = word(s).toUpperCase();
       html += '<div class="label">' + (isActive(r) ? W + " " + r.number + " · POT" : W + " " + r.number + " FINISHED") + "</div>" +
-        '<div class="amount">' + money(r.pot) + "</div>";
+        '<div class="amount">' + chips(r.pot) + "</div>";
       if (isActive(r) && isPoker(s)) {
-        html += "<div>Blinds <b>" + money(s.settings.smallBlind) + "/" + money(s.settings.bigBlind) + "</b>" +
-          (s.settings.ante > 0 ? " &nbsp; Ante <b>" + money(s.settings.ante) + "</b>" : "") +
-          (r.phase === "BETTING" ? " &nbsp; Bet <b>" + money(r.currentBet) + "</b>" : "") + "</div>";
+        html += "<div>Blinds <b>" + chips(s.settings.smallBlind) + "/" + chips(s.settings.bigBlind) + "</b>" +
+          (s.settings.ante > 0 ? " &nbsp; Ante <b>" + chips(s.settings.ante) + "</b>" : "") +
+          (r.phase === "BETTING" ? " &nbsp; Bet <b>" + chips(r.currentBet) + "</b>" : "") + "</div>";
       } else if (isActive(r)) {
-        html += "<div>Blind <b>" + money(r.stake) + "</b> &nbsp; Chaal <b>" + money(r.stake * 2) + "</b></div>";
+        html += "<div>Blind <b>" + chips(r.stake) + "</b> &nbsp; Chaal <b>" + chips(r.stake * 2) + "</b></div>";
       }
       html += '<div class="what">' + esc(u.roundText) + "</div>" +
         (isActive(r) ? '<div class="small">Dealer: ' + esc(nameOf(s, r.dealerId)) + "</div>" : next);
@@ -565,12 +623,14 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         (p.isHost ? '<span class="pill muted">Host</span>' : "") + "</div>" +
         '<div><span class="pill ' + st[1] + '">' + st[0] + "</span>" +
         (isActive(r) && h && h.invested > 0 ? ' <span class="small muted">' +
-          (isPoker(s) && h.streetBet > 0 ? "bet " + money(h.streetBet) + " · " : "") + "in pot " + money(h.invested) + "</span>" : "") +
+          (isPoker(s) && h.streetBet > 0 ? "bet " + chips(h.streetBet) + " · " : "") + "in pot " + chips(h.invested) + "</span>" : "") +
         "</div>" +
+        (h && h.cards.length === 3 && showingIds(r).indexOf(p.id) >= 0 ?
+          '<div class="shown">' + miniHand(h.cards, tableWild(s.settings)) + esc(u.handNames[p.id] || "") + "</div>" : "") +
         (!p.hasDevice ? '<div class="small muted">No phone · host plays for them</div>' :
           !p.isHost && !p.connected ? '<div class="offline">Offline' + (p.onBrowser ? " · in browser" : "") + "</div>" :
           p.onBrowser ? '<div class="small muted">In browser</div>' : "") +
-        '</div><div class="money"><div class="bal">' + money(p.balance) + '</div><div class="small ' + netClass(net) + '">' +
+        '</div><div class="money"><div class="bal">' + chips(p.balance) + '</div><div class="small ' + netClass(net) + '">' +
         signed(net) + "</div></div></div>";
     });
     return html;
@@ -578,23 +638,23 @@ h2 { font-size: 17px; margin: 8px 0 0; }
 
   function ledgerTab(u) {
     var s = u.state, r = s.round;
-    var html = '<div class="card"><table><thead><tr><th>Player</th><th>Bought</th><th>Chips</th><th>Net</th></tr></thead><tbody>';
-    var bought = 0, chips = 0;
+    var html = '<div class="card"><table><thead><tr><th>Player</th><th>Took</th><th>Chips</th><th>Net</th></tr></thead><tbody>';
+    var took = 0, held = 0;
     s.players.forEach(function (p) {
       var net = p.balance - p.buyIn;
-      bought += p.buyIn; chips += p.balance;
-      html += "<tr><td>" + esc(p.name) + (p.id === u.playerId ? " (you)" : "") + '</td><td class="muted">' + money(p.buyIn) +
-        "</td><td>" + money(p.balance) + '</td><td class="bold ' + netClass(net) + '">' + signed(net) + "</td></tr>";
+      took += p.buyIn; held += p.balance;
+      html += "<tr><td>" + esc(p.name) + (p.id === u.playerId ? " (you)" : "") + '</td><td class="muted">' + chips(p.buyIn) +
+        "</td><td>" + chips(p.balance) + '</td><td class="bold ' + netClass(net) + '">' + signed(net) + "</td></tr>";
     });
-    html += "</tbody><tfoot><tr><td>Total</td><td>" + money(bought) + "</td><td>" + money(chips) + "</td><td></td></tr></tfoot></table></div>";
-    if (isActive(r)) html += '<div class="small muted">' + money(r.pot) + " is in the pot of the running round. Settle up after it ends.</div>";
-    html += "<h2>Settle up</h2>";
-    if (!u.transfers.length) html += '<div class="muted">Everyone is even. Nobody owes anything.</div>';
+    html += "</tbody><tfoot><tr><td>Total</td><td>" + chips(took) + "</td><td>" + chips(held) + "</td><td></td></tr></tfoot></table></div>";
+    if (isActive(r)) html += '<div class="small muted">' + chipCount(r.pot) + " are in the pot of the running round. Even out after it ends.</div>";
+    html += "<h2>Even out</h2>";
+    if (!u.transfers.length) html += '<div class="muted">Everyone is even.</div>';
     u.transfers.forEach(function (t) {
       html += '<div class="card transfer"><span>' + esc(nameOf(s, t.fromId)) + '</span><span class="muted">→</span><span class="to">' +
-        esc(nameOf(s, t.toId)) + '</span><span class="bold">' + money(t.amount) + "</span></div>";
+        esc(nameOf(s, t.toId)) + '</span><span class="bold">' + chipCount(t.amount) + "</span></div>";
     });
-    html += '<div class="small muted">Bought = starting chips plus top ups, minus cash outs. Net = chips now minus bought.</div>';
+    html += '<div class="small muted">Took = starting chips plus extra chips taken, minus chips given back. Net = chips now minus took.</div>';
     return html;
   }
 
@@ -613,7 +673,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       var strike = res.undone ? ' style="text-decoration:line-through;opacity:.6"' : "";
       html += '<div class="card"><div class="row"><b>' + Word + " " + res.number + "</b>" +
         (res.undone ? '<span><span class="pill err">Undone by host</span></span>' : "") +
-        '<span style="text-align:right"' + strike + ">Pot " + money(res.pot) +
+        '<span style="text-align:right"' + strike + ">Pot " + chips(res.pot) +
         "</span></div><div class=\"pos bold\"" + strike + ">" + (res.winnerNames.length === 1 ? "Winner: " : "Split between: ") +
         esc(res.winnerNames.join(", ")) + '</div><div class="small"' + strike + ">" + changes + "</div>" +
         (res.undone ? '<div class="small muted">Not counted: the chips went back to how they were before this result.</div>' : "") +
@@ -636,23 +696,30 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     }
     if (isPoker(s)) return pokerActions(u);
     var me0 = player(s, me);
-    var summary = o.inRound && me0 ? money(me0.balance) + " left · " + (o.isPacked ? "packed" : o.isBlind ? "blind" : "seen") : "";
+    var summary = o.inRound && me0 ? chipCount(me0.balance) + " left · " + (o.isPacked ? "packed" : o.isBlind ? "blind" : "seen") : "";
     if (r.phase === "BETTING") {
-      var html = '<div><div class="head">' + (o.isTurn ? "Your turn" : "Waiting for " + esc(nameOf(s, r.turnId))) +
-        '</div><div class="small muted">' + summary + "</div></div>";
+      var html = '<div class="hhead"><div><div class="head">' + (o.isTurn ? "Your turn" : "Waiting for " + esc(nameOf(s, r.turnId))) +
+        '</div><div class="small muted">' + summary + "</div></div>" + myCards(u) + "</div>";
       if (!o.inRound) return html + '<div class="small muted">You are not in this round. You\'ll be dealt in next round.</div>';
       if (o.isPacked) return html + '<div class="small muted">You packed. Wait for the next round.</div>';
+      if (o.isAllIn) {
+        return html + '<div class="small muted">You are all in. Wait for the show.</div>' +
+          '<div class="row">' + (o.canSee ? btn("See cards", "see", "line slim") : "") + btn("Pack", "pack", "danger slim") + "</div>";
+      }
       if (o.isTurn) {
-        html += '<div class="row">' +
-          btn(o.callLabel + "<b>" + money(o.callAmount) + "</b>", "bet", "big", "", o.callError != null) +
-          btn("Raise<b>" + money(o.raiseAmount) + "</b>", "raise", "big alt", "", o.raiseError != null) + "</div>";
+        // Not enough chips for the blind or chaal: all in is the way to stay in.
+        html += '<div class="row">' + (o.canAllIn ? btn("All in<b>" + chips(o.allInAmount) + "</b>", "allin", "big alt") :
+          btn(o.callLabel + "<b>" + chips(o.callAmount) + "</b>", "bet", "big", "", o.callError != null) +
+          btn("Raise<b>" + chips(o.raiseAmount) + "</b>", "raise", "big alt", "", o.raiseError != null)) + "</div>";
         html += '<div class="row">' +
           (o.canSee ? btn("See cards", "see", "line slim") : "") +
-          (o.showAvailable ? btn("Show " + money(o.showAmount), "show", "line slim", "", o.showError != null) : "") +
+          (o.showAvailable ? btn("Show " + chips(o.showAmount), "show", "line slim", "", o.showError != null) : "") +
           (o.sideShowAvailable ? btn("Side show", "sideshow", "line slim", "", o.sideShowError != null) : "") +
           btn("Pack", "pack", "danger slim") + "</div>";
-        var note = o.callError || (o.raiseError && o.raiseError.indexOf("needs") < 0 ? o.raiseError : null) ||
-          (o.sideShowAvailable ? (o.sideShowError || "Side show: pay " + money(o.sideShowAmount) +
+        var note = (o.canAllIn ? "Not enough chips for the " + o.callLabel.toLowerCase() + " of " + chipCount(o.callAmount) +
+          ". Go all in to stay in, or pack." : null) ||
+          o.callError || (o.raiseError && o.raiseError.indexOf("needs") < 0 ? o.raiseError : null) ||
+          (o.sideShowAvailable ? (o.sideShowError || "Side show: pay " + chipCount(o.sideShowAmount) +
             " and compare cards with " + nameOf(s, o.sideShowTargetId)) : null);
         if (note) html += '<div class="small muted">' + esc(note) + "</div>";
         return html;
@@ -669,12 +736,64 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       return '<div class="head">Waiting for ' + esc(nameOf(s, ss.targetId)) + " to answer " + esc(nameOf(s, ss.requesterId)) + "'s side show</div>";
     }
     var decide = btn("Not sure? Decide from the cards", "decide", "line slim");
+    // What to wait for: the host confirming what the cards say, more cards, or the host deciding.
+    function waiting(text) {
+      if (r.suggestedWinnerIds.length) return '<div class="small muted">Waiting for the host to confirm</div>';
+      if (r.awaitingCardsFrom.length) return "";
+      return '<div class="small muted">' + text + "</div>" + decide;
+    }
     if (r.phase === "SIDE_SHOW_COMPARE" && ss) {
-      return '<div class="head">' + esc(nameOf(s, ss.requesterId)) + " and " + esc(nameOf(s, ss.targetId)) + " are comparing cards</div>" +
-        '<div class="small muted">Waiting for the host to enter who won the side show</div>' + decide;
+      var other = me === ss.requesterId ? ss.targetId : me === ss.targetId ? ss.requesterId : null;
+      return '<div class="head">' + (other ? "Your side show with " + esc(nameOf(s, other)) :
+        esc(nameOf(s, ss.requesterId)) + " and " + esc(nameOf(s, ss.targetId)) + " are comparing cards") + "</div>" +
+        enterPrompt(u) + suggestion(u) + waiting("Waiting for the host to enter who won the side show");
+    }
+    if (r.pots.length) {
+      // After an all-in the host decides the main pot and each side pot in turn.
+      return '<div class="head">' + esc(u.roundText) + "</div>" + enterPrompt(u) + suggestion(u) +
+        waiting("Cards are on the table. Waiting for the host to enter who won each pot.");
     }
     return '<div class="head">Show: ' + esc(r.showdownIds.map(function (id) { return nameOf(s, id); }).join(" vs ")) + "</div>" +
-      '<div class="small muted">Cards are on the table. Waiting for the host to enter the winner.</div>' + decide;
+      enterPrompt(u) + suggestion(u) + waiting("Cards are on the table. Waiting for the host to enter the winner.");
+  }
+
+  // Your own cards next to the betting header: tap to enter or change them until they're shown.
+  function myCards(u) {
+    var h = handOf(u.state.round, u.playerId), o = u.options;
+    if (!h || isPoker(u.state)) return "";
+    if (h.cards.length === 3) {
+      var hand = miniHand(h.cards, tableWild(u.state.settings));
+      if (o.canEnterCards) return '<button class="mycards" data-act="mycards" aria-label="Change your cards">' + hand + "✎</button>";
+      return h.cardsShown ? '<span class="mycards" title="Shown, so they can\'t change">' + hand + "🔒</span>" : '<span class="mycards">' + hand + "</span>";
+    }
+    return o.canEnterCards ? '<button class="key plain" data-act="mycards">Enter cards</button>' : "";
+  }
+
+  function enterPrompt(u) {
+    var h = handOf(u.state.round, u.playerId);
+    if (!h || h.cards.length || !u.options.canEnterCards || comparedIds(u.state.round).indexOf(u.playerId) < 0) return "";
+    return btn("Enter your cards so the app can check", "mycards", "line slim");
+  }
+
+  // What the entered cards say: each hand this player can see, and who wins once everyone's cards are in.
+  function suggestion(u) {
+    var s = u.state, r = s.round, me = u.playerId, winners = r.suggestedWinnerIds, awaiting = r.awaitingCardsFrom;
+    var lines = comparedIds(r).filter(function (id) { return u.handNames[id]; }).map(function (id) {
+      return '<div' + (winners.indexOf(id) >= 0 ? ' class="bold"' : "") + ">" + (id === me ? "You" : esc(nameOf(s, id))) + ": " +
+        esc(u.handNames[id]) + "</div>";
+    });
+    if (!lines.length && !winners.length && !r.suggestionNote && !awaiting.length) return "";
+    var head = "";
+    if (winners.length) {
+      var who = winners.length === 1 && winners[0] === me ? "you win" : esc(nameOf(s, winners[0])) + " wins";
+      head = '<div class="big">' + (winners.length > 1 ? "The cards say " + esc(winners.map(function (id) { return nameOf(s, id); }).join(" and ")) + " tie" :
+        "The cards say " + who + (s.settings.variant === "MUFLIS" ? " with the lowest hand" : "")) + "</div>";
+    }
+    var names = awaiting.map(function (id) { return id === me ? "you" : nameOf(s, id); });
+    return '<div class="suggest' + (winners.length ? " done" : "") + '">' + head + lines.join("") +
+      (r.suggestionNote ? "<div>" + esc(r.suggestionNote) + "</div>" : "") +
+      (names.length ? '<div class="bold">Waiting for cards from ' + esc(names.length > 1 ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : names[0]) + "</div>" : "") +
+      "</div>";
   }
 
   // Decide winner: players enter everyone's 3 cards and the host's phone ranks the hands.
@@ -686,20 +805,77 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     ["AK47", "AK47", "Aces, kings, 4s and 7s are jokers (★)."],
     ["JOKER", "Joker", "Every card of the joker rank is a joker (★)."]
   ];
-  // The variant picked last, remembered on this phone.
-  var decideVariant = store.get("variant") || "CLASSIC";
-  var decideJokers = (store.get("jokers") || "").split(",").filter(Boolean).map(Number);
   function wildRanks(d) { return d.variant === "AK47" ? [14, 13, 4, 7] : d.variant === "JOKER" ? d.jokers : []; }
   function rankText(r) { return { 14: "A", 13: "K", 12: "Q", 11: "J" }[r] || String(r); }
   function cardCode(c) { return rankText(c.r) + c.s; }
   function isRed(s) { return s === "H" || s === "D"; }
 
-  function openDecide(title, labels, asker, canAdd) {
-    openDialog({
+  // Starts on the table's variant, with any cards already entered that this player can see.
+  function openDecide(title, labels, asker, canAdd, cards) {
+    var set = data.state.settings;
+    var d = {
       kind: "decide", title: title, labels: labels, asker: asker, canAdd: canAdd, slot: [0, 0], rank: null, suit: null,
-      variant: decideVariant, jokers: decideJokers.slice(),
-      cards: labels.map(function () { return [null, null, null]; }), result: null, asked: 0
+      variant: set.variant || "CLASSIC", jokers: (set.jokerRanks || []).slice(),
+      cards: labels.map(function (l, i) {
+        var codes = cards && cards[i];
+        return codes && codes.length === 3 ? codes.map(parseCard) : [null, null, null];
+      }), result: null, asked: 0
+    };
+    d.slot = firstEmpty(d) || [0, 0];
+    openDialog(d);
+    if (d.cards.some(function (h) { return h.some(Boolean); })) askVerdict(d);
+  }
+
+  // The card picker for your own 3 cards, so the app can check a side show or show.
+  function openMyCards(afterSeeing) {
+    var r = data.state.round, h = handOf(r, data.playerId);
+    if (!h) return;
+    var d = {
+      kind: "mycards", round: r.number, afterSeeing: afterSeeing, labels: ["You"], slot: [0, 0], rank: null, suit: null,
+      variant: data.state.settings.variant, jokers: (data.state.settings.jokerRanks || []).slice(), asker: null,
+      cards: [h.cards.length === 3 ? h.cards.map(parseCard) : [null, null, null]], result: null, asked: 0
+    };
+    openDialog(d);
+    if (h.cards.length === 3) askVerdict(d);
+  }
+
+  function myCardsBody(d) {
+    var res = d.result || {}, hand = d.cards[0], complete = hand.every(Boolean), named = complete && res.names && res.names[0];
+    var html = "<h3>Your cards</h3><div class=\"small muted\">Only you can see them. In a side show the other player sees them, " +
+      "and at a show everyone does. The app then works out who won and the host confirms. Shown cards can't be changed.</div>" +
+      '<div class="slots mid">' + slotsHtml(d, 0, wildRanks(d)) + "</div>" +
+      '<div class="center' + (named ? " bold" : " small muted") + '">' + (named ? esc(named) : "Tap a card, then pick its rank and suit") + "</div>";
+    return html + keysHtml(d, false) + '<div class="actions"><button data-act="close">' + (d.afterSeeing ? "Skip" : "Cancel") +
+      '</button><button data-act="savecards"' + (complete ? "" : " disabled") + ">Save</button></div>";
+  }
+
+  function slotsHtml(d, i, wild) {
+    return d.cards[i].map(function (c, j) {
+      var sel = d.slot[0] === i && d.slot[1] === j;
+      return '<button class="slot' + (c ? (isRed(c.s) ? " red" : "") : " empty") + (sel ? " sel" : "") +
+        '" data-act="slot" data-i="' + i + '" data-j="' + j + '">' +
+        (c ? rankText(c.r) + "<br>" + suitSymbol(c.s) + (wild.indexOf(c.r) >= 0 ? '<span class="star">★</span>' : "") : "?") + "</button>";
+    }).join("");
+  }
+
+  // Rank and suit keys: tap a rank and a suit, in either order. Cards already entered can't be picked.
+  function keysHtml(d, canClear) {
+    var used = usedCards(d), html = '<div class="keys">';
+    for (var r = 14; r >= 2; r--) {
+      var free = SUITS.some(function (x) { return !used[rankText(r) + x[0]]; }) && (!d.suit || !used[rankText(r) + d.suit]);
+      html += '<button class="key' + (d.rank === r ? " on" : "") + '" data-act="rank" data-r="' + r + '"' + (free ? "" : " disabled") + ">" + rankText(r) + "</button>";
+    }
+    html += '</div><div class="keys">';
+    SUITS.forEach(function (x) {
+      var free = !d.rank || !used[rankText(d.rank) + x[0]];
+      html += '<button class="key suit' + (isRed(x[0]) ? " red" : "") + (d.suit === x[0] ? " on" : "") + '" data-act="suit" data-s="' + x[0] + '"' +
+        (free ? "" : " disabled") + ">" + x[1] + "</button>";
     });
+    if (canClear) {
+      var current = d.cards[d.slot[0]] && d.cards[d.slot[0]][d.slot[1]];
+      html += '<button class="key plain" data-act="clearcard"' + (current ? "" : " disabled") + ">Clear</button>";
+    }
+    return html + "</div>";
   }
 
   // Cards on the table, except the one in the selected slot, which can be swapped.
@@ -740,7 +916,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
   }
 
   function decideBody(d) {
-    var res = d.result || {}, names = res.names || [], winners = res.winners || [], used = usedCards(d);
+    var res = d.result || {}, names = res.names || [], winners = res.winners || [];
     var html = "<h3>" + esc(d.title) + '</h3><div class="small muted">Tap a card, then pick its rank and suit. ' +
       "The app ranks the hands by 3 Patti rules.</div>";
     var variant = VARIANTS.filter(function (v) { return v[0] === d.variant; })[0] || VARIANTS[0], wild = wildRanks(d);
@@ -759,14 +935,8 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       var won = winners.indexOf(i) >= 0, missing = hand.filter(function (c) { return !c; }).length;
       html += '<div class="hand' + (won ? " won" : "") + '"><div class="hl"><div class="hn">' + esc(d.labels[i]) +
         (won ? ' <span class="pill pri">Wins</span>' : "") + '</div><div class="small">' +
-        (missing ? '<span class="muted">' + missing + " to enter</span>" : '<b>' + esc(names[i] || "") + "</b>") + '</div></div><div class="slots">';
-      hand.forEach(function (c, j) {
-        var sel = d.slot[0] === i && d.slot[1] === j;
-        html += '<button class="slot' + (c ? (isRed(c.s) ? " red" : "") : " empty") + (sel ? " sel" : "") +
-          '" data-act="slot" data-i="' + i + '" data-j="' + j + '">' +
-          (c ? rankText(c.r) + "<br>" + SUITS.filter(function (x) { return x[0] === c.s; })[0][1] +
-            (wild.indexOf(c.r) >= 0 ? '<span class="star">★</span>' : "") : "?") + "</button>";
-      });
+        (missing ? '<span class="muted">' + missing + " to enter</span>" : '<b>' + esc(names[i] || "") + "</b>") + '</div></div><div class="slots">' +
+        slotsHtml(d, i, wild);
       html += "</div>" + (d.canAdd && d.cards.length > 2 ? '<button class="del" data-act="delhand" data-i="' + i + '" aria-label="Remove">✕</button>' : "") + "</div>";
     });
     if (d.canAdd && d.cards.length < 6) html += '<button class="key plain" data-act="addhand">Add a hand</button>';
@@ -778,21 +948,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         esc(who.length > 1 ? who.join(" and ") + " tie" : d.variant === "MUFLIS" ? who[0] + " wins with the lowest hand" : who[0] + " wins") +
         "</div><div>" + esc(names[winners[0]]) + "</div>" + (res.note ? '<div class="small">' + esc(res.note) + "</div>" : "") + "</div>";
     } else html += '<div class="verdict muted">Enter every card to see who wins.</div>';
-    html += '<div class="keys">';
-    for (var r = 14; r >= 2; r--) {
-      var free = SUITS.some(function (x) { return !used[rankText(r) + x[0]]; }) && (!d.suit || !used[rankText(r) + d.suit]);
-      html += '<button class="key' + (d.rank === r ? " on" : "") + '" data-act="rank" data-r="' + r + '"' + (free ? "" : " disabled") + ">" + rankText(r) + "</button>";
-    }
-    html += '</div><div class="keys">';
-    SUITS.forEach(function (x) {
-      var free = !d.rank || !used[rankText(d.rank) + x[0]];
-      html += '<button class="key suit' + (isRed(x[0]) ? " red" : "") + (d.suit === x[0] ? " on" : "") + '" data-act="suit" data-s="' + x[0] + '"' +
-        (free ? "" : " disabled") + ">" + x[1] + "</button>";
-    });
-    var current = d.cards[d.slot[0]] && d.cards[d.slot[0]][d.slot[1]];
-    html += '<button class="key plain" data-act="clearcard"' + (current ? "" : " disabled") + ">Clear</button></div>" +
-      '<div class="actions"><button data-act="close">Close</button></div>';
-    return html;
+    return html + keysHtml(d, true) + '<div class="actions"><button data-act="close">Close</button></div>';
   }
 
   function pokerActions(u) {
@@ -803,7 +959,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         '<div class="small muted">Cards are on the table. Waiting for the host to enter who won' + (r.pots.length > 1 ? " each pot" : "") + ".</div>";
     }
     var html = '<div><div class="head">' + (o.isTurn ? "Your turn" : "Waiting for " + esc(nameOf(s, r.turnId))) + "</div>" +
-      (o.inHand ? '<div class="small muted">' + money(o.stack) + " left" + (o.streetBet > 0 ? " · bet " + money(o.streetBet) : "") + "</div>" : "") +
+      (o.inHand ? '<div class="small muted">' + chipCount(o.stack) + " left" + (o.streetBet > 0 ? " · bet " + chips(o.streetBet) : "") + "</div>" : "") +
       "</div>";
     if (!o.inHand) return html + '<div class="small muted">You are not in this hand. You\'ll be dealt in next hand.</div>';
     if (o.folded) return html + '<div class="small muted">You folded. Wait for the next hand.</div>';
@@ -824,21 +980,24 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       }
       html += '<div class="row">' + btn("Back", "raiseBack", "line") +
         '<button class="btn alt" data-act="raiseGo" style="flex:2" id="raiseGo"' + (busy ? " disabled" : "") + ">" +
-        verb + money(raise.amount) + (raise.amount === allInTo ? " all-in" : "") + "</button></div>";
+        verb + chips(raise.amount) + (raise.amount === allInTo ? " all-in" : "") + "</button></div>";
       return html;
     }
     html += '<div class="row">' + btn("Fold", "pack", "danger slim");
     if (o.canCheck) html += btn("Check", "check", "big");
-    if (o.canCall) html += btn((o.callIsAllIn ? "Call all-in" : "Call") + "<b>" + money(o.toCall) + "</b>", "call", "big");
+    if (o.canCall) html += btn((o.callIsAllIn ? "Call all-in" : "Call") + "<b>" + chips(o.toCall) + "</b>", "call", "big");
     if (o.canRaise) {
-      html += btn((o.isBet ? "Bet" : "Raise") + "<b>" + money(o.minRaiseTo) + (o.maxRaiseTo > o.minRaiseTo ? "+" : "") + "</b>", "raiseOpen", "big alt");
+      html += btn((o.isBet ? "Bet" : "Raise") + "<b>" + chips(o.minRaiseTo) + (o.maxRaiseTo > o.minRaiseTo ? "+" : "") + "</b>", "raiseOpen", "big alt");
     }
-    return html + "</div>";
+    html += "</div>";
+    // All in straight away, when the limit allows betting everything.
+    if (o.canRaise && o.maxRaiseTo === o.streetBet + o.stack) html += '<div class="row">' + btn("All in " + chips(o.stack), "pokerAllIn", "line slim") + "</div>";
+    return html;
   }
 
   function raiseLabel() {
     var o = data.poker, allInTo = o.streetBet + o.stack;
-    return (o.isBet ? "Bet " : "Raise to ") + money(raise.amount) + (raise.amount === allInTo ? " all-in" : "");
+    return (o.isBet ? "Bet " : "Raise to ") + chips(raise.amount) + (raise.amount === allInTo ? " all-in" : "");
   }
 
   document.addEventListener("input", function (e) {
@@ -865,38 +1024,48 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       var p = data && player(data.state, data.playerId);
       if (!p) return closeDialog();
       body = "<h3>" + esc(p.name) + " (you)</h3>" +
-        '<div class="small muted">Chips ' + money(p.balance) + " · bought " + money(p.buyIn) + " · " + signed(p.balance - p.buyIn) + "</div>" +
+        '<div class="small muted">Chips ' + chips(p.balance) + " · took " + chips(p.buyIn) + " · " + signed(p.balance - p.buyIn) + "</div>" +
         '<div class="menu"><button data-act="rename">Rename</button><button data-act="sitout">' +
         (p.sittingOut ? "Sit back in" : "Sit out from next " + word(data.state)) + '</button><button data-act="rules">Table rules</button>' +
         (isPoker(data.state) ? "" : '<button data-act="checker">Which hand wins?</button>') +
-        (canVibrate ? '<button data-act="vibrate">Vibrate on my turn: ' + (vibrateOn ? "on" : "off") + "</button>" : "") + "</div>" +
+        (canVibrate ? '<button data-act="vibrate">Vibrate on my turn: ' + (vibrateOn ? "on" : "off") + "</button>" : "") +
+        (isPoker(data.state) ? "" : '<button data-act="askcards">Enter my cards after See cards: ' + (askCards ? "on" : "off") + "</button>") + "</div>" +
         '<div class="actions"><button data-act="close">Close</button></div>';
     } else if (dialog.kind === "decide") {
       body = decideBody(dialog);
+    } else if (dialog.kind === "mycards") {
+      body = myCardsBody(dialog);
     } else if (dialog.kind === "rename") {
       body = '<h3>Rename</h3><input id="newName" class="field" maxlength="20" value="' + esc(name) + '">' +
         '<div class="actions"><button data-act="close">Cancel</button><button data-act="saveName">Save</button></div>';
     } else if (dialog.kind === "rules") {
       var set = data.state.settings;
       body = "<h3>Table rules</h3><div class=\"bold\">" + esc(data.rulesSummary) + '</div><div class="small muted">' + (isPoker(data.state) ?
-        "• The two players after the dealer post the blinds, " + money(set.smallBlind) + " and " + money(set.bigBlind) + ". The dealer button moves one seat every hand.<br>" +
-        (set.ante > 0 ? (set.anteStyle === "BIG_BLIND" ? "• The big blind also pays an ante of " + money(set.ante) + " for every player." :
-          "• Everyone antes " + money(set.ante) + " before the blinds.") + " Antes go into the pot but don't count as a bet.<br>" : "") +
+        "• The two players after the dealer post the blinds, " + chips(set.smallBlind) + " and " + chipCount(set.bigBlind) + ". The dealer button moves one seat every hand.<br>" +
+        (set.ante > 0 ? (set.anteStyle === "BIG_BLIND" ? "• The big blind also pays an ante of " + chipCount(set.ante) + " for every player." :
+          "• Everyone antes " + chipCount(set.ante) + " before the blinds.") + " Antes go into the pot but don't count as a bet.<br>" : "") +
         "• Betting goes round four times: before the flop, after the flop, on the turn and on the river.<br>" +
         "• Check, call, bet or raise. A raise must be at least as big as the last bet or raise.<br>" +
         (set.betLimit === "POT_LIMIT" ? "• Pot limit: the most you can bet or raise is the size of the pot.<br>" : "• No limit: you can bet any amount up to all your chips.<br>") +
         "• An all-in player can only win what they matched from each other player. The app works out the side pots.<br>" +
         "• At showdown the host taps who won each pot.</div>" : "") + (isPoker(data.state) ? "" :
-        "• Every round starts with a boot of " + money(set.bootAmount) + " from each player. The stake starts at the boot.<br>" +
+        "• Every round starts with a boot of " + chipCount(set.bootAmount) + " from each player. The stake starts at the boot.<br>" +
         "• The winner of a round deals the next one, so the player after the winner goes first.<br>" +
         "• Blind players bet the stake. Seen players bet twice the stake (chaal).<br>" +
         "• Raise doubles the stake for everyone after you.<br>" +
         "• Side show: a seen player can ask the previous seen player to compare cards privately. The weaker hand packs.<br>" +
         "• Show: when 2 players are left, either can pay one bet to show. The host enters who won.<br>" +
-        "• Hands from best: trail, pure sequence, sequence, color, pair, high card. A-K-Q is the top sequence, then A-2-3.</div>") +
+        "• All in: short of chips for your bet? Put in all you have and stay in. You can win the pot up to then; what others bet after goes to a side pot.<br>" +
+        "• After seeing your cards you can enter them. Only you see them until a side show or show, when the app says who won and the host confirms.<br>" +
+        "• Hands from best: trail, pure sequence, sequence, color, pair, high card. A-K-Q is the top sequence, then A-2-3." +
+        ({ MUFLIS: "<br>• Muflis: the order is reversed and the lowest hand wins, so 5-3-2 of mixed suits is best.",
+          AK47: "<br>• AK47: aces, kings, 4s and 7s are jokers. Each stands for whatever card makes the best hand.",
+          JOKER: "<br>• Joker: every " + (set.jokerRanks || []).slice().sort(function (a, b) { return a - b; }).map(rankText).join("/") +
+            " is a joker and stands for whatever card makes the best hand." }[set.variant] || "") + "</div>") +
         '<div class="sig">Made by Afler</div><div class="actions"><button data-act="close">OK</button></div>';
     }
-    overlay.innerHTML = '<div class="scrim" data-act="scrim"><div class="dialog' + (dialog.kind === "decide" ? " wide" : "") + '">' + body + "</div></div>";
+    overlay.innerHTML = '<div class="scrim" data-act="scrim"><div class="dialog' + (dialog.kind === "decide" || dialog.kind === "mycards" ? " wide" : "") + '">' +
+      body + "</div></div>";
     var input = document.getElementById("newName");
     if (input) input.focus();
   }
@@ -926,14 +1095,25 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       case "view": view = el.getAttribute("data-view"); store.set("view", view); render(); break;
       case "bet": send({ type: "bet", playerId: me, raise: false }); break;
       case "raise": send({ type: "bet", playerId: me, raise: true }); break;
-      case "see": send({ type: "see", playerId: me }); break;
+      case "see":
+        send({ type: "see", playerId: me });
+        // Offer to enter the cards just seen.
+        if (askCards && !isPoker(data.state)) openMyCards(true);
+        break;
+      case "mycards": openMyCards(false); break;
+      case "savecards":
+        var picked = dialog.cards[0];
+        closeDialog();
+        send({ type: "enter_cards", playerId: me, cards: picked.map(cardCode) });
+        break;
+      case "askcards": askCards = !askCards; store.set("askCards", askCards ? "on" : "off"); renderDialog(); break;
       case "show": send({ type: "show", playerId: me }); break;
       case "sideshow": send({ type: "side_show", playerId: me }); break;
       case "accept": send({ type: "side_show_answer", playerId: me, accept: true }); break;
       case "refuse": send({ type: "side_show_answer", playerId: me, accept: false }); break;
       case "pack":
         var h = handOf(data.state.round, me), verb = isPoker(data.state) ? "Fold" : "Pack";
-        openDialog({ kind: "confirm", title: verb + " your hand?", text: "The " + money(h ? h.invested : 0) + " already in the pot stays there.",
+        openDialog({ kind: "confirm", title: verb + " your hand?", text: "The " + chipCount(h ? h.invested : 0) + " already in the pot stay there.",
           label: verb, danger: true, action: { type: "pack", playerId: me } });
         break;
       case "check": send({ type: "check", playerId: me }); break;
@@ -959,18 +1139,31 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       case "close": closeDialog(); break;
       case "decide":
         var rd = data.state.round, sd = rd && rd.phase === "SIDE_SHOW_COMPARE" ? rd.sideShow : null;
-        var ids = sd ? [sd.requesterId, sd.targetId] : rd ? rd.showdownIds : [];
-        openDecide(sd ? "Decide the side show" : "Decide the show", ids.map(function (id) { return nameOf(data.state, id); }), sd ? 0 : null, false);
+        // After an all-in only the players in the pot being decided are compared.
+        var pd = rd && !sd && rd.pots.length ? rd.pots[rd.potWinners.length] : null;
+        var ids = sd ? [sd.requesterId, sd.targetId] : pd ? pd.eligibleIds : rd ? rd.showdownIds : [];
+        var title = sd ? "Decide the side show" : pd ? "Decide the " + (rd.pots.length > 1 && rd.potWinners.length ? "side pot " + rd.potWinners.length : rd.pots.length > 1 ? "main pot" : "pot") : "Decide the show";
+        openDecide(title, ids.map(function (id) { return nameOf(data.state, id); }), sd ? 0 : null, false,
+          ids.map(function (id) { var hd = handOf(rd, id); return hd ? hd.cards : []; }));
+        break;
+      case "allin":
+        var mine = player(data.state, me);
+        openDialog({ kind: "confirm", title: "Go all in?", label: "All in", action: { type: "all_in", playerId: me },
+          text: "Put in your last " + chipCount(mine ? mine.balance : 0) + " and stay in the round. You can win the pot as it is now; " +
+            "what others bet after this goes to a side pot that only they can win." });
+        break;
+      case "pokerAllIn":
+        var po = data.poker;
+        openDialog({ kind: "confirm", title: "Go all in?", label: "All in", action: { type: "raise_to", playerId: me, amount: po.streetBet + po.stack },
+          text: "Bet all your " + chipCount(po.stack) + ". You can only win what each other player matches." });
         break;
       case "checker": openDecide("Which hand wins?", ["Hand 1", "Hand 2"], null, true); break;
       case "vibrate": vibrateOn = !vibrateOn; store.set("vibrate", vibrateOn ? "on" : "off"); renderDialog(); break;
-      case "variant":
-        dialog.variant = decideVariant = el.getAttribute("data-v"); store.set("variant", decideVariant); askVerdict(dialog);
-        break;
+      case "variant": dialog.variant = el.getAttribute("data-v"); askVerdict(dialog); break;
       case "jrank":
         var jr = +el.getAttribute("data-r"), at = dialog.jokers.indexOf(jr);
         if (at >= 0) dialog.jokers.splice(at, 1); else dialog.jokers.push(jr);
-        decideJokers = dialog.jokers.slice(); store.set("jokers", decideJokers.join(",")); askVerdict(dialog);
+        askVerdict(dialog);
         break;
       case "slot": dialog.slot = [+el.getAttribute("data-i"), +el.getAttribute("data-j")]; dialog.rank = null; dialog.suit = null; renderDialog(); break;
       case "rank":

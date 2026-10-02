@@ -66,7 +66,11 @@ sealed interface GameDialog {
     data class Rename(val playerId: String) : GameDialog
     data class ConfirmRemove(val playerId: String) : GameDialog
     data class ConfirmPack(val playerId: String) : GameDialog
+    data class ConfirmAllIn(val playerId: String) : GameDialog
     data class ConfirmWinners(val winnerIds: List<String>) : GameDialog
+
+    /** The 3 Patti card picker for a seat's own cards. [afterSeeing] when it opened as the player saw them. */
+    data class EnterCards(val playerId: String, val roundNumber: Int, val afterSeeing: Boolean = false) : GameDialog
 }
 
 @Composable
@@ -78,6 +82,8 @@ fun GameScreen(
     vibrateOnTurn: Boolean = false,
     onVibrateChange: (Boolean) -> Unit = {},
     onMyTurn: () -> Unit = {},
+    askForCards: Boolean = true,
+    onAskForCardsChange: (Boolean) -> Unit = {},
 ) {
     val state by session.state.collectAsState()
     val myId by session.myPlayerId.collectAsState()
@@ -124,7 +130,7 @@ fun GameScreen(
     } else {
         GameContent(
             session, current, me, connection, canUndo, snackbar, onExit,
-            startInTableView, onViewChange, vibrateOnTurn, onVibrateChange,
+            startInTableView, onViewChange, vibrateOnTurn, onVibrateChange, askForCards, onAskForCardsChange,
         )
     }
 
@@ -152,6 +158,8 @@ private fun GameContent(
     onViewChange: (tableView: Boolean) -> Unit,
     vibrateOnTurn: Boolean,
     onVibrateChange: (Boolean) -> Unit,
+    askForCards: Boolean,
+    onAskForCardsChange: (Boolean) -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var tableView by rememberSaveable { mutableStateOf(startInTableView) }
@@ -169,6 +177,8 @@ private fun GameContent(
                 onOpen = { dialog = it },
                 vibrateOnTurn = vibrateOnTurn,
                 onToggleVibrate = { onVibrateChange(!vibrateOnTurn) },
+                askForCards = askForCards,
+                onToggleAskForCards = { onAskForCardsChange(!askForCards) },
             )
         },
         bottomBar = {
@@ -178,6 +188,7 @@ private fun GameContent(
                 isHost = session.isHost,
                 onAction = session::submit,
                 onOpen = { dialog = it },
+                askForCards = askForCards,
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
@@ -236,6 +247,8 @@ private fun GameTopBar(
     onOpen: (GameDialog) -> Unit,
     vibrateOnTurn: Boolean,
     onToggleVibrate: () -> Unit,
+    askForCards: Boolean,
+    onToggleAskForCards: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val round = state.round
@@ -295,6 +308,13 @@ private fun GameTopBar(
                     trailingIcon = { Checkbox(checked = vibrateOnTurn, onCheckedChange = null) },
                     onClick = onToggleVibrate,
                 )
+                if (!state.settings.isPoker) {
+                    DropdownMenuItem(
+                        text = { Text("Enter my cards after See cards") },
+                        trailingIcon = { Checkbox(checked = askForCards, onCheckedChange = null) },
+                        onClick = onToggleAskForCards,
+                    )
+                }
             }
         },
     )

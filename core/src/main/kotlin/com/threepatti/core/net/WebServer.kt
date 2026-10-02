@@ -17,8 +17,10 @@ import com.threepatti.core.Transfer
 import com.threepatti.core.Variant
 import com.threepatti.core.describeRound
 import com.threepatti.core.fail
+import com.threepatti.core.handName
 import com.threepatti.core.nextDealText
 import com.threepatti.core.summary
+import com.threepatti.core.visibleTo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -53,6 +55,8 @@ data class WebUpdate(
     val rulesSummary: String,
     /** Who deals the next 3 Patti round and who goes first, between rounds. */
     val nextDealText: String? = null,
+    /** The hand each player's entered cards make, such as "Pair of 7s + K", for the cards this player can see. */
+    val handNames: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -239,7 +243,8 @@ class WebServer(
             val hands = input.hands.map { codes -> codes.map { Card.parse(it) ?: fail("Unknown card $it") } }
             val rules = HandRules.of(input.variant, input.jokerRanks)
             val names = hands.map { if (it.size == 3) TeenPatti.best(it, rules).name else null }
-            if (hands.any { it.size != 3 }) {
+            // A single hand is only named, such as a player's own cards.
+            if (hands.size < 2 || hands.any { it.size != 3 }) {
                 CompareResult(true, names)
             } else {
                 val verdict = TeenPatti.decide(hands.withIndex().associate { it.index to it.value }, input.sideShowAsker, rules)
@@ -264,16 +269,23 @@ class WebServer(
         }
     }
 
-    private fun update(state: GameState, playerId: String) = WebUpdate(
-        playerId = playerId,
-        state = state,
-        options = Rules.seatOptions(state, playerId),
-        poker = if (state.settings.isPoker) PokerRules.options(state, playerId) else null,
-        transfers = Settlement.transfers(state.players),
-        roundText = state.round?.let { describeRound(state, it) },
-        rulesSummary = state.settings.summary(),
-        nextDealText = nextDealText(state),
-    )
+    private fun update(table: GameState, playerId: String): WebUpdate {
+        // Cards other players entered stay hidden unless this player may see them.
+        val state = table.visibleTo(playerId)
+        return WebUpdate(
+            playerId = playerId,
+            state = state,
+            options = Rules.seatOptions(state, playerId),
+            poker = if (state.settings.isPoker) PokerRules.options(state, playerId) else null,
+            transfers = Settlement.transfers(state.players),
+            roundText = state.round?.let { describeRound(state, it) },
+            rulesSummary = state.settings.summary(),
+            nextDealText = nextDealText(state),
+            handNames = state.round?.hands.orEmpty()
+                .mapNotNull { hand -> state.handName(hand)?.let { hand.playerId to it } }
+                .toMap(),
+        )
+    }
 
     private fun respondJson(out: OutputStream, code: Int, result: WebResult) = respond(
         out,

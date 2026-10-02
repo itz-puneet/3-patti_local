@@ -30,6 +30,10 @@ data class TableSettings(
     val potLimit: Int = 0,
     /** How many blind bets a player may make before they have to see their cards. 0 means no limit. */
     val maxBlindTurns: Int = 0,
+    /** Rankings the app uses to check a side show or show from the cards players entered. */
+    val variant: Variant = Variant.CLASSIC,
+    /** Ranks that are jokers in [Variant.JOKER], from 2 to 14 (ace). */
+    val jokerRanks: Set<Int> = emptySet(),
     // Poker.
     val smallBlind: Int = 1,
     val bigBlind: Int = 2,
@@ -37,13 +41,11 @@ data class TableSettings(
     /** Ante per player each hand, on top of the blinds. 0 means no ante. */
     val ante: Int = 0,
     val anteStyle: AnteStyle = AnteStyle.EVERYONE,
-    val currency: String = "₹",
 ) {
     val isPoker: Boolean get() = game == GameType.POKER
 
     fun validationError(): String? = when {
         startingBalance <= 0 -> "Starting chips must be more than 0"
-        currency.length > 4 -> "Currency symbol is too long"
         isPoker -> when {
             smallBlind <= 0 -> "Small blind must be more than 0"
             bigBlind < smallBlind -> "Big blind can't be smaller than the small blind"
@@ -59,6 +61,8 @@ data class TableSettings(
         potLimit < 0 -> "Pot limit can't be negative"
         potLimit in 1..bootAmount * 2 -> "Pot limit must be more than ${bootAmount * 2}"
         maxBlindTurns < 0 -> "Blind limit can't be negative"
+        variant == Variant.JOKER && jokerRanks.isEmpty() -> "Pick the joker rank"
+        jokerRanks.any { it !in 2..14 } -> "Joker ranks run from 2 to A"
         else -> null
     }
 }
@@ -69,7 +73,7 @@ data class Player(
     val name: String,
     /** Chips the player has in front of them right now. */
     val balance: Int,
-    /** Total chips handed to the player (starting chips plus top ups, minus cash outs). */
+    /** Total chips handed to the player: starting chips plus extra chips taken, minus chips given back. */
     val buyIn: Int,
     val isHost: Boolean = false,
     /** False for players added by the host who don't have their own phone. */
@@ -102,11 +106,22 @@ data class Hand(
     val acted: Boolean = false,
     /** Faced only a short all-in raise after acting: may call or fold but not raise again. */
     val raiseClosed: Boolean = false,
+    // 3 Patti cards a player entered themselves, such as "AS". Only they see them until a side show or show.
+    val cards: List<String> = emptyList(),
+    /** The entered cards were shown to another player, so they can't be changed any more. */
+    val cardsShown: Boolean = false,
 )
 
-/** A poker pot and the players who can win it. The main pot comes first, then side pots. */
+/** A pot and the players who can win it. The main pot comes first, then side pots. */
 @Serializable
 data class Pot(val amount: Int, val eligibleIds: List<String>)
+
+/**
+ * 3 Patti: the size of the pot when [playerIds] went all in. They can win the pot up to that point but
+ * not what others bet after it, which goes to a side pot.
+ */
+@Serializable
+data class AllInBreak(val potAt: Int, val playerIds: List<String>)
 
 @Serializable
 enum class RoundPhase {
@@ -156,6 +171,17 @@ data class Round(
     val pots: List<Pot> = emptyList(),
     /** Winners of the pots decided so far, in the same order as [pots]. */
     val potWinners: List<List<String>> = emptyList(),
+    /** 3 Patti all-ins, in the order they happened. */
+    val allInBreaks: List<AllInBreak> = emptyList(),
+    /**
+     * 3 Patti: who wins the side show or the pot being decided, worked out from the cards the players in it
+     * entered, so the host only has to confirm. Empty until all of them have entered their cards.
+     */
+    val suggestedWinnerIds: List<String> = emptyList(),
+    /** Explains the suggestion, such as a tie, or why there is none. */
+    val suggestionNote: String? = null,
+    /** Players in it who haven't entered their cards yet, while others have. */
+    val awaitingCardsFrom: List<String> = emptyList(),
 ) {
     val isActive: Boolean get() = phase != RoundPhase.FINISHED
     val activeHands: List<Hand> get() = hands.filter { it.status != HandStatus.PACKED }
@@ -224,14 +250,18 @@ data class GameState(
 
     fun nameOf(id: String?): String = player(id)?.name ?: "Former player"
 
-    fun money(amount: Int): String = formatMoney(amount, settings.currency)
+    fun chips(amount: Int): String = formatChips(amount)
+
+    fun chipCount(amount: Int): String = formatChipCount(amount)
 }
 
-fun formatMoney(amount: Int, currency: String): String =
-    if (amount < 0) "-$currency${-amount}" else "$currency$amount"
+// The app counts chips, never money: amounts are shown as plain numbers.
 
-fun formatSignedMoney(amount: Int, currency: String): String = when {
-    amount > 0 -> "+$currency$amount"
-    amount < 0 -> "-$currency${-amount}"
-    else -> "${currency}0"
-}
+/** A number of chips on its own, such as "250" next to a label like "Pot". */
+fun formatChips(amount: Int): String = amount.toString()
+
+/** A number of chips in a sentence, such as "250 chips" or "1 chip". */
+fun formatChipCount(amount: Int): String = if (amount == 1 || amount == -1) "$amount chip" else "$amount chips"
+
+/** A gain or loss of chips, such as "+20" or "-35". */
+fun formatSignedChips(amount: Int): String = if (amount > 0) "+$amount" else amount.toString()

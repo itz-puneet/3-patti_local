@@ -60,7 +60,7 @@ internal fun PokerBetting(
         else -> "Waiting for ${state.nameOf(round.turnId)}"
     }
     val detail = if (o.inHand) {
-        "${state.money(o.stack)} left" + if (o.streetBet > 0) " · bet ${state.money(o.streetBet)}" else ""
+        "${state.chipCount(o.stack)} left" + if (o.streetBet > 0) " · bet ${state.chips(o.streetBet)}" else ""
     } else {
         null
     }
@@ -82,7 +82,7 @@ internal fun PokerBetting(
                     if (o.canCall) {
                         BigButton(
                             label = if (o.callIsAllIn) "Call all-in" else "Call",
-                            amount = state.money(o.toCall),
+                            amount = state.chips(o.toCall),
                             enabled = true,
                             onClick = { onAction(GameAction.Call(seatId)) },
                         )
@@ -90,12 +90,18 @@ internal fun PokerBetting(
                     if (o.canRaise) {
                         BigButton(
                             label = if (o.isBet) "Bet" else "Raise",
-                            amount = "${state.money(o.minRaiseTo)}+".takeIf { o.maxRaiseTo > o.minRaiseTo }
-                                ?: state.money(o.minRaiseTo),
+                            amount = "${state.chips(o.minRaiseTo)}+".takeIf { o.maxRaiseTo > o.minRaiseTo }
+                                ?: state.chips(o.minRaiseTo),
                             enabled = true,
                             secondary = true,
                             onClick = { raising = true },
                         )
+                    }
+                }
+                // All in straight away, when the limit allows betting everything.
+                if (o.canRaise && o.maxRaiseTo == o.streetBet + o.stack) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SmallButton("All in ${state.chips(o.stack)}") { onOpen(GameDialog.ConfirmAllIn(seatId)) }
                     }
                 }
             }
@@ -164,7 +170,7 @@ private fun RaiseControls(state: GameState, o: PokerOptions, onCancel: () -> Uni
             ),
         ) {
             Text(
-                "$verb ${state.money(amount)}" + if (amount == allInTo) " all-in" else "",
+                "$verb ${state.chips(amount)}" + if (amount == allInTo) " all-in" else "",
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
@@ -172,21 +178,51 @@ private fun RaiseControls(state: GameState, o: PokerOptions, onCancel: () -> Uni
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/** A poker showdown, or a 3 Patti show after an all-in: the host enters who won each pot, main pot first. */
 @Composable
-internal fun PokerShowdown(state: GameState, round: Round, isHost: Boolean, onOpen: (GameDialog) -> Unit) {
+internal fun PokerShowdown(
+    state: GameState,
+    round: Round,
+    myId: String,
+    isHost: Boolean,
+    onAction: (GameAction) -> Unit,
+    onOpen: (GameDialog) -> Unit,
+) {
     val index = round.potWinners.size
     val pot = round.pots.getOrNull(index) ?: return
     val label = PokerRules.potLabel(round, index)
+    val poker = state.settings.isPoker
     Text(
-        "Showdown · $label ${state.money(pot.amount)}",
+        "${if (poker) "Showdown" else "Show"} · $label: ${state.chipCount(pot.amount)}",
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
     )
+    // 3 Patti players may have entered their cards, so the app can say who wins each pot.
+    EnterCardsPrompt(state, round, myId, isHost, onOpen)
+    SuggestionBox(state, round, myId)
+    val suggested = round.suggestedWinnerIds
     if (!isHost) {
-        Hint("Cards are on the table. Waiting for the host to enter who won${if (round.pots.size > 1) " each pot" else ""}.")
+        if (suggested.isNotEmpty()) {
+            Hint("Waiting for the host to confirm the winner.")
+        } else if (round.awaitingCardsFrom.isEmpty()) {
+            Hint("Cards are on the table. Waiting for the host to enter who won${if (round.pots.size > 1) " each pot" else ""}.")
+            if (!poker) DecideFromCards(onOpen)
+        }
         return
     }
+    ConfirmOrPick(
+        confirmText = suggested.takeIf { it.isNotEmpty() }?.let { giveText(state, pot.amount, it) },
+        awaited = round.awaitingCardsFrom.isNotEmpty(),
+        resetKey = index to suggested,
+        onConfirm = { onAction(GameAction.DeclareWinners(suggested)) },
+    ) { PickPotWinners(state, round, index, onOpen) }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PickPotWinners(state: GameState, round: Round, index: Int, onOpen: (GameDialog) -> Unit) {
+    val pot = round.pots[index]
+    val poker = state.settings.isPoker
     var selected by remember(round.number, index) { mutableStateOf(setOf<String>()) }
     Hint(
         if (round.pots.size > 1) {
@@ -211,6 +247,7 @@ internal fun PokerShowdown(state: GameState, round: Round, isHost: Boolean, onOp
         }
     }
     val winners = pot.eligibleIds.filter { it in selected }
+    if (!poker) DecideFromCards(onOpen)
     Button(
         onClick = { onOpen(GameDialog.ConfirmWinners(winners)) },
         enabled = winners.isNotEmpty(),
@@ -219,8 +256,8 @@ internal fun PokerShowdown(state: GameState, round: Round, isHost: Boolean, onOp
         Text(
             when (winners.size) {
                 0 -> "Pick the winner"
-                1 -> "Give ${state.money(pot.amount)} to ${state.nameOf(winners[0])}"
-                else -> "Split ${state.money(pot.amount)} between ${winners.size}"
+                1 -> "Give ${state.chipCount(pot.amount)} to ${state.nameOf(winners[0])}"
+                else -> "Split ${state.chipCount(pot.amount)} between ${winners.size}"
             },
         )
     }

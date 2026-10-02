@@ -47,7 +47,10 @@ import com.threepatti.core.HandStatus
 import com.threepatti.core.Player
 import com.threepatti.core.Round
 import com.threepatti.core.RoundPhase
+import com.threepatti.core.Rules
 import com.threepatti.core.describeRound
+import com.threepatti.core.enteredCards
+import com.threepatti.core.handRules
 import com.threepatti.core.nextDealText
 import kotlin.math.PI
 import kotlin.math.cos
@@ -203,7 +206,7 @@ private fun TableCentre(state: GameState, modifier: Modifier) {
                 textAlign = TextAlign.Center,
             )
             Text(
-                "Everyone starts with ${state.money(state.settings.startingBalance)}",
+                "Everyone starts with ${state.chipCount(state.settings.startingBalance)}",
                 color = dim,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
@@ -218,7 +221,7 @@ private fun TableCentre(state: GameState, modifier: Modifier) {
             style = MaterialTheme.typography.labelSmall,
             letterSpacing = 1.5.sp,
         )
-        val pot = state.money(round.pot)
+        val pot = state.chips(round.pot)
         Text(
             pot,
             color = OnFelt,
@@ -230,15 +233,16 @@ private fun TableCentre(state: GameState, modifier: Modifier) {
             lineHeight = 38.sp,
             fontWeight = FontWeight.Bold,
         )
-        if (round.isActive) {
+        // Stakes only matter while players are betting.
+        if (round.phase == RoundPhase.BETTING || round.phase == RoundPhase.SIDE_SHOW_REQUESTED) {
             val stakes = if (state.settings.isPoker) {
                 listOfNotNull(
-                    "Blinds ${state.money(state.settings.smallBlind)}/${state.money(state.settings.bigBlind)}",
-                    if (state.settings.ante > 0) "Ante ${state.money(state.settings.ante)}" else null,
-                    if (round.phase == RoundPhase.BETTING) "Bet ${state.money(round.currentBet)}" else null,
+                    "Blinds ${state.chips(state.settings.smallBlind)}/${state.chips(state.settings.bigBlind)}",
+                    if (state.settings.ante > 0) "Ante ${state.chips(state.settings.ante)}" else null,
+                    if (round.phase == RoundPhase.BETTING) "Bet ${state.chips(round.currentBet)}" else null,
                 )
             } else {
-                listOf("Blind ${state.money(round.stake)}", "Chaal ${state.money(round.stake * 2)}")
+                listOf("Blind ${state.chips(round.stake)}", "Chaal ${state.chips(round.stake * 2)}")
             }
             // Each stake wraps as a whole, so a line never ends in a separator.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally)) {
@@ -246,7 +250,7 @@ private fun TableCentre(state: GameState, modifier: Modifier) {
             }
         }
         Text(
-            describeRound(state, round),
+            feltText(state, round),
             color = OnFelt,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
@@ -254,6 +258,18 @@ private fun TableCentre(state: GameState, modifier: Modifier) {
             modifier = Modifier.padding(top = 4.dp),
         )
         if (!round.isActive) NextDeal(state)
+    }
+}
+
+/** What the table is waiting for, kept short during a 3 Patti show: the panel below says who is in it. */
+private fun feltText(state: GameState, round: Round): String {
+    val sideShow = round.sideShow
+    return when {
+        state.settings.isPoker -> describeRound(state, round)
+        round.phase == RoundPhase.SHOWDOWN && round.pots.isEmpty() -> "Show"
+        round.phase == RoundPhase.SIDE_SHOW_COMPARE && sideShow != null ->
+            "Side show: ${state.nameOf(sideShow.requesterId)} vs ${state.nameOf(sideShow.targetId)}"
+        else -> describeRound(state, round)
     }
 }
 
@@ -284,8 +300,8 @@ private fun seatStatus(state: GameState, player: Player): Pair<String, PillTone>
     val round = state.round?.takeIf { it.isActive } ?: return label to tone
     val hand = round.hand(player.id)?.takeIf { it.status != HandStatus.PACKED } ?: return label to tone
     return when {
-        !state.settings.isPoker -> "$label · ${state.money(hand.invested)}" to tone
-        hand.streetBet > 0 -> (if (hand.allIn) "All-in ${state.money(hand.streetBet)}" else "Bet ${state.money(hand.streetBet)}") to tone
+        !state.settings.isPoker -> "$label · ${state.chips(hand.invested)}" to tone
+        hand.streetBet > 0 -> (if (hand.allIn) "All-in ${state.chips(hand.streetBet)}" else "Bet ${state.chips(hand.streetBet)}") to tone
         else -> label to tone
     }
 }
@@ -385,7 +401,7 @@ private fun Seat(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        state.money(player.balance),
+                        state.chips(player.balance),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (isMe) colors.onPrimaryContainer else colors.primary,
@@ -393,20 +409,26 @@ private fun Seat(
                     )
                 }
             }
-            val (label, tone) = seatStatus(state, player)
-            val (container, content) = toneColors(tone)
-            Text(
-                label,
-                style = MaterialTheme.typography.labelSmall,
-                color = content,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier
-                    .padding(top = 3.dp)
-                    .wrapContentWidth(unbounded = true)
-                    .background(container, RoundedCornerShape(50))
-                    .padding(horizontal = 7.dp, vertical = 1.dp),
-            )
+            // Cards on show to this phone (a side show it's part of, or a show) take the place of the status.
+            val shown = round?.takeIf { player.id in Rules.showingCards(it) }?.hand(player.id)?.enteredCards()
+            if (shown != null) {
+                MiniHand(shown, state.settings.handRules, Modifier.padding(top = 3.dp), width = if (compact) 18.dp else 20.dp)
+            } else {
+                val (label, tone) = seatStatus(state, player)
+                val (container, content) = toneColors(tone)
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = content,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier
+                        .padding(top = 3.dp)
+                        .wrapContentWidth(unbounded = true)
+                        .background(container, RoundedCornerShape(50))
+                        .padding(horizontal = 7.dp, vertical = 1.dp),
+                )
+            }
         }
     }
 }

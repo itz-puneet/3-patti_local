@@ -25,8 +25,15 @@ class TableHost(
     private var devices: Map<String, String> = snapshot.devices
     private val undoStack = ArrayDeque<UndoEntry>()
 
+    val hostPlayerId: String = snapshot.state.players.first { it.isHost }.id
+
+    /** The whole table, with every card players entered. Each phone and browser is sent only what it may see. */
     private val _state = MutableStateFlow(markRemotePlayersOffline(snapshot.state))
     val state: StateFlow<GameState> = _state.asStateFlow()
+
+    /** The table as the host's own screen shows it: other players' cards stay private, as on their phones. */
+    private val _hostView = MutableStateFlow(hostViewOf(_state.value))
+    val hostView: StateFlow<GameState> = _hostView.asStateFlow()
 
     private val _canUndo = MutableStateFlow(false)
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
@@ -34,8 +41,6 @@ class TableHost(
     /** What the next undo would reverse, to show the host before they confirm. */
     private val _nextUndo = MutableStateFlow<String?>(null)
     val nextUndo: StateFlow<String?> = _nextUndo.asStateFlow()
-
-    val hostPlayerId: String = snapshot.state.players.first { it.isHost }.id
 
     /** Applies [action] and returns an error message when it is not allowed. */
     fun perform(action: GameAction, actor: Actor = Actor.Host): String? {
@@ -49,7 +54,8 @@ class TableHost(
             if (action == GameAction.StartRound) {
                 // A started round locks everything before it. A misdeal is handled with Cancel round instead.
                 undoStack.clear()
-            } else {
+            } else if (action !is GameAction.EnterCards) {
+                // Entered cards are what's in a player's hand, not a move, so undo leaves them alone.
                 val lastSeq = before.log.lastOrNull()?.seq ?: 0
                 val text = after.log.firstOrNull { it.seq > lastSeq }?.text
                 undoStack.addLast(UndoEntry(before, text))
@@ -116,10 +122,15 @@ class TableHost(
 
     private fun publish(next: GameState) {
         _state.value = next
+        _hostView.value = hostViewOf(next)
         _canUndo.value = undoStack.isNotEmpty()
         _nextUndo.value = undoStack.lastOrNull()?.let { it.text ?: "the last change" }
         onSnapshot(HostSnapshot(next, devices))
     }
+
+    /** The host types in the cards of players without a phone, so it sees those too. */
+    private fun hostViewOf(state: GameState): GameState =
+        state.visibleTo(hostPlayerId, state.players.filter { !it.hasDevice }.map { it.id }.toSet())
 
     private fun markRemotePlayersOffline(state: GameState): GameState = state.copy(
         players = state.players.map { if (it.isHost) it.copy(connected = true) else it.copy(connected = false) },

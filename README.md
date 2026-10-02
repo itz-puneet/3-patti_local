@@ -1,14 +1,14 @@
 # 3 Patti Chips Handler
 
-An Android app for keeping track of chips while you play **3 Patti (Teen Patti) or poker** with **real cards**.
-One Android phone hosts the table and everyone else joins from their own phone over the local WiFi
+An Android app for keeping track of chips while you play **3 Patti (Teen Patti) or poker** with a deck of
+cards. It only counts chips: there is no money anywhere in the app. One Android phone hosts the table and everyone else joins from their own phone over the local WiFi
 or the host's hotspot. Friends with an iPhone join from Safari by scanning a QR code. No internet or
 account needed.
 
 The app does the chip work. In 3 Patti it collects the boot, knows what blind and seen players have
 to pay, and handles show and side show. In poker it posts the blinds, runs the four betting rounds,
-enforces minimum raises and pot limit, and splits side pots when players are all-in. Either way it pays
-out the winner and keeps a ledger of who is up or down, so at the end it tells you exactly who pays whom.
+enforces minimum raises and pot limit, and splits side pots when players are all-in. Either way it gives
+the pot to the winner and keeps a ledger of who is up or down in chips.
 
 ## Install
 
@@ -40,10 +40,12 @@ separate app, so it can sit next to the APK, and both play at the same table.
 3. **Join.** Everyone else enters their name and taps **Join a table**. The table shows up by itself.
    If it doesn't, type the address the host sees under **⋮ → Invite players**. iPhones scan the QR
    code on that same screen, enter their name in Safari and tap **Join the table**.
-4. **Play.** Deal real cards and the host taps **Start round** (or **Start hand** in poker). Each player
+4. **Play.** Deal the cards and the host taps **Start round** (or **Start hand** in poker). Each player
    then acts on their own phone when it's their turn. In 3 Patti: **See cards**, **Blind/Chaal**,
-   **Raise**, **Pack**, **Show** or **Side show**. In poker: **Fold**, **Check**, **Call**, **Bet** or
-   **Raise** (with a slider and Min / ½ pot / Pot / All-in shortcuts).
+   **Raise**, **Pack**, **Show** or **Side show**, and **All in** when your chips don't cover the bet.
+   In poker: **Fold**, **Check**, **Call**, **Bet** or **Raise** (with a slider and Min / ½ pot / Pot /
+   All-in shortcuts).
+   After **See cards** you can enter your 3 cards (see [Your cards](#your-cards-3-patti) below).
    The **Table** tab draws everyone round a card table in turn order, with you at the bottom and play
    going clockwise. It shows the pot in the middle, each player's chips and status, the dealer button,
    and whose turn it is. Between 3 Patti rounds it says who deals next and who goes first. Tap **List**
@@ -53,15 +55,32 @@ separate app, so it can sit next to the APK, and both play at the same table.
    playing in a browser vibrate too; iPhones don't let web pages vibrate.
 5. **Results.** For a show, side show or poker showdown, compare cards on the table and the host taps
    who won. With side pots the host picks the winner of each pot, main pot first. The chips go to the
-   winners automatically.
+   winners automatically. In 3 Patti, when the players in a show or side show have entered their cards,
+   the app says who won and the host confirms with one tap.
    Not sure who won a 3 Patti show or side show? Tap **Not sure? Decide from the cards**, enter everyone's
    3 cards and the app names each hand and the winner; the host can then give the pot in one tap.
-   **⋮ → Which hand wins?** checks any hands at any time. Pick the variant you're playing: **Classic**,
-   **Muflis** (rankings reversed, the lowest hand wins), **AK47** (aces, kings, 4s and 7s are jokers) or
-   **Joker** (pick the joker rank). A joker stands for whichever card makes the best hand, or the lowest
-   in Muflis, and the app shows what it used, such as "Trail of 9s (K♠ as 9♥)".
-6. **Settle up.** The **Ledger** tab shows everyone's chips and profit or loss, and a **Settle up** list
-   of who pays whom.
+   **⋮ → Which hand wins?** checks any hands at any time.
+6. **Even out.** The **Ledger** tab shows everyone's chips and how far up or down they are, and an
+   **Even out** list of who hands chips to whom so everyone ends even.
+
+## Your cards (3 Patti)
+
+After **See cards** the app offers to take your 3 cards (switch that off in **⋮ → Enter my cards after See
+cards**, and enter them later from the panel). Entering them is optional and helps settle arguments:
+
+- Only you see them. Your phone shows them next to your buttons; the host's screen doesn't show them.
+- In a **side show** the two players see each other's cards and the app's verdict. Everyone else only
+  sees who won.
+- At a **show** everyone's entered cards are on the table, and the app names each hand.
+- Once everyone in the side show or show has entered their cards, the app works out the winner and the
+  host confirms with one tap, or picks the winner by hand.
+- Cards that have been shown are locked and can't be changed. Undo never changes them either.
+
+The table's **variant** decides how hands rank. Set it in **Table settings → Which hand wins**:
+**Classic**, **Muflis** (rankings reversed, the lowest hand wins), **AK47** (aces, kings, 4s and 7s are
+jokers) or **Joker** (pick the joker rank). For dealer's choice, change it between rounds. A joker stands
+for whichever card makes the best hand, or the lowest in Muflis, and the app shows what it used, such as
+"Trail of 9s (K♠ as 9♥)".
 
 ## 3 Patti betting rules
 
@@ -75,8 +94,10 @@ separate app, so it can sit next to the APK, and both play at the same table.
 | Pot limit | When the pot reaches it, everyone still playing must show. `0` means no limit. |
 | Blind turns | How many blind bets a player can make before they must see. `0` means no limit. |
 | Pack | Fold. When only one player is left, they win the pot. |
+| All in | Only when your chips don't cover the blind or chaal: put them all in and stay in. You can win the pot as it was then; what others bet afterwards goes to a side pot only they can win. When nobody else can bet, everyone still in shows. |
 | Show | Allowed when two players are left. Costs one bet. The host enters the winner. |
 | Side show | A seen player asks the previous seen player to compare privately. If accepted, the host enters the winner and the other packs. |
+| Side pots | After an all-in the show is decided pot by pot, main pot first; each pot only goes to the players in it. |
 
 The winner of each round deals the next one, so the player sitting after the winner goes first. If the winner
 sits out, the player after their seat still goes first. With a split pot, the winner who comes first after
@@ -129,7 +150,7 @@ Works for Texas Hold'em, Omaha and other flop games; the host picks **No limit**
 - **Play for someone**: players without a phone can be added from the menu, and the host plays their moves.
   The host also gets the controls automatically when a player's phone is offline, and can take over any
   turn with **Play for …**.
-- **Tap a player** to add or take chips (buy more / cash out), mark cards seen, pack their hand, sit
+- **Tap a player** to add or take chips (when they take more or give some back), mark cards seen, pack their hand, sit
   them out, rename, change seat order, or remove them.
 - **Call show for everyone**, or **Cancel round (misdeal)** to give every bet of the round back.
 - **Table settings** can be changed between rounds.

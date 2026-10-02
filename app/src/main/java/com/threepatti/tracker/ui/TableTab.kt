@@ -36,9 +36,13 @@ import androidx.compose.ui.unit.sp
 import com.threepatti.core.GameState
 import com.threepatti.core.Player
 import com.threepatti.core.RoundPhase
+import com.threepatti.core.Rules
 import com.threepatti.core.describeRound
-import com.threepatti.core.formatMoney
-import com.threepatti.core.formatSignedMoney
+import com.threepatti.core.enteredCards
+import com.threepatti.core.formatChips
+import com.threepatti.core.handName
+import com.threepatti.core.handRules
+import com.threepatti.core.formatSignedChips
 import com.threepatti.core.nextDealText
 import com.threepatti.core.summary
 
@@ -140,7 +144,7 @@ private fun PotCard(state: GameState) {
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    "Everyone starts with ${state.money(state.settings.startingBalance)}",
+                    "Everyone starts with ${state.chipCount(state.settings.startingBalance)}",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(state.settings.summary(), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
@@ -152,20 +156,20 @@ private fun PotCard(state: GameState) {
                     letterSpacing = 1.5.sp,
                 )
                 Text(
-                    state.money(round.pot),
+                    state.chips(round.pot),
                     style = MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 if (round.isActive && state.settings.isPoker) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)) {
-                        StakeLabel("Blinds", "${state.money(state.settings.smallBlind)}/${state.money(state.settings.bigBlind)}")
-                        if (state.settings.ante > 0) StakeLabel("Ante", state.money(state.settings.ante))
-                        if (round.phase == RoundPhase.BETTING) StakeLabel("Bet", state.money(round.currentBet))
+                        StakeLabel("Blinds", "${state.chips(state.settings.smallBlind)}/${state.chips(state.settings.bigBlind)}")
+                        if (state.settings.ante > 0) StakeLabel("Ante", state.chips(state.settings.ante))
+                        if (round.phase == RoundPhase.BETTING) StakeLabel("Bet", state.chips(round.currentBet))
                     }
                 } else if (round.isActive) {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        StakeLabel("Blind", state.money(round.stake))
-                        StakeLabel("Chaal", state.money(round.stake * 2))
+                        StakeLabel("Blind", state.chips(round.stake))
+                        StakeLabel("Chaal", state.chips(round.stake * 2))
                     }
                 }
                 Spacer(Modifier.padding(top = 4.dp))
@@ -229,7 +233,6 @@ private fun PlayerRowContent(state: GameState, player: Player, isMe: Boolean, hi
     val round = state.round
     val hand = round?.hand(player.id)
     val colors = MaterialTheme.colorScheme
-    val currency = state.settings.currency
     Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Initial(player.name, highlighted = highlighted)
         Spacer(Modifier.width(12.dp))
@@ -259,11 +262,18 @@ private fun PlayerRowContent(state: GameState, player: Player, isMe: Boolean, hi
                 if (round != null && round.isActive && hand != null && hand.invested > 0) {
                     Hint(
                         if (state.settings.isPoker && hand.streetBet > 0) {
-                            "bet ${formatMoney(hand.streetBet, currency)} · in pot ${formatMoney(hand.invested, currency)}"
+                            "bet ${formatChips(hand.streetBet)} · in pot ${formatChips(hand.invested)}"
                         } else {
-                            "in pot ${formatMoney(hand.invested, currency)}"
+                            "in pot ${formatChips(hand.invested)}"
                         },
                     )
+                }
+            }
+            val shown = round?.takeIf { player.id in Rules.showingCards(it) }?.let { r -> r.hand(player.id) }
+            shown?.enteredCards()?.let { cards ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MiniHand(cards, state.settings.handRules)
+                    state.handName(shown)?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
                 }
             }
             when {
@@ -278,12 +288,12 @@ private fun PlayerRowContent(state: GameState, player: Player, isMe: Boolean, hi
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                formatMoney(player.balance, currency),
+                formatChips(player.balance),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                formatSignedMoney(player.net, currency),
+                formatSignedChips(player.net),
                 style = MaterialTheme.typography.labelMedium,
                 color = colors.forNet(player.net),
             )

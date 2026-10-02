@@ -158,6 +158,32 @@ class WebServerTest {
     }
 
     @Test
+    fun browsersGetOnlyTheCardsTheyMaySee() {
+        server.start()
+        Browser("web-priya", "Priya").use { priya ->
+            val me = priya.nextUpdate().playerId
+            val ravi = table.join("device-ravi", "Ravi")
+            assertNull(table.perform(StartRound))
+            assertEquals(WebResult(true), priya.act(GameAction.SeeCards(me)))
+            assertEquals(WebResult(true), priya.act(GameAction.EnterCards(me, listOf("KS", "KH", "2D"))))
+            val mine = priya.nextUpdate { it.state.round?.hand(me)?.cards?.size == 3 }
+            assertEquals(mapOf(me to "Pair of Kings + 2"), mine.handNames)
+
+            assertNull(table.perform(GameAction.SeeCards(ravi)))
+            assertNull(table.perform(GameAction.EnterCards(ravi, listOf("9C", "8C", "7C"))))
+            val version = table.state.value.version
+            val hidden = priya.nextUpdate { it.state.version == version }
+            assertTrue(hidden.state.round!!.hand(ravi)!!.cards.isEmpty())
+            assertEquals(setOf(me), hidden.handNames.keys)
+
+            assertNull(table.perform(GameAction.ForceShow))
+            val show = priya.nextUpdate { it.state.round?.phase == RoundPhase.SHOWDOWN }
+            assertEquals(mapOf(me to "Pair of Kings + 2", ravi to "Pure sequence 9-8-7"), show.handNames)
+            assertEquals(listOf("p1"), show.state.round!!.awaitingCardsFrom)
+        }
+    }
+
+    @Test
     fun pokerTablesSendPokerOptions() {
         val pokerTable = TableHost(
             HostSnapshot(GameEngine.newTable("Poker", TableSettings(game = GameType.POKER, startingBalance = 100), "Asha")),
@@ -172,7 +198,7 @@ class WebServerTest {
                 val data = generateSequence { reader.readLine() }.first { line -> line.startsWith("data: ") }
                 val update = Wire.json.decodeFromString(WebUpdate.serializer(), data.removePrefix("data: "))
                 assertTrue(update.poker != null && !update.poker!!.inHand)
-                assertEquals("Blinds ₹1/₹2 · no limit", update.rulesSummary)
+                assertEquals("Blinds 1/2 · no limit", update.rulesSummary)
             }
         } finally {
             pokerServer.stop()

@@ -83,6 +83,29 @@ class NetworkTest {
     }
 
     @Test
+    fun phonesGetOnlyTheCardsTheyMaySee() = runBlocking<Unit> {
+        server.start()
+        val ravi = client("device-ravi", "Ravi")
+        withTimeout(5_000) { ravi.awaitConnected() }
+        val meena = client("device-meena", "Meena")
+        withTimeout(5_000) { meena.awaitConnected() }
+        val raviId = ravi.playerId.value!!
+        val meenaId = meena.playerId.value!!
+
+        assertNull(table.perform(StartRound))
+        assertNull(table.perform(GameAction.SeeCards(raviId)))
+        assertTrue(ravi.send(GameAction.EnterCards(raviId, listOf("AS", "KS", "QS"))))
+        withTimeout(5_000) { ravi.state.first { it?.round?.hand(raviId)?.cards?.size == 3 } }
+        assertNull(table.perform(GameAction.SeeCards(meenaId)))
+        val meenaSees = withTimeout(5_000) { meena.state.first { it?.round?.hand(meenaId)?.status == HandStatus.SEEN } }!!
+        assertEquals(emptyList(), meenaSees.round!!.hand(raviId)!!.cards)
+
+        // At a show the cards are on the table for everyone.
+        assertNull(table.perform(GameAction.ForceShow))
+        withTimeout(5_000) { meena.state.first { it?.round?.hand(raviId)?.cards?.size == 3 } }
+    }
+
+    @Test
     fun removedPlayerIsDisconnected() = runBlocking<Unit> {
         server.start()
         val guest = client("device-guest", "Guest")

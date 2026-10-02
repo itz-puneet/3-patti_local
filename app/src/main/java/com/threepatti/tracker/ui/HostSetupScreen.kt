@@ -39,6 +39,8 @@ import com.threepatti.core.AnteStyle
 import com.threepatti.core.BetLimit
 import com.threepatti.core.GameType
 import com.threepatti.core.TableSettings
+import com.threepatti.core.Variant
+import com.threepatti.core.rankLabel
 
 /** Settings as typed in text fields. Empty optional fields mean "no limit". */
 data class SettingsInput(
@@ -53,12 +55,13 @@ data class SettingsInput(
     val betLimit: BetLimit,
     val ante: String,
     val anteStyle: AnteStyle,
-    val currency: String,
+    val variant: Variant = Variant.CLASSIC,
+    val jokerRanks: Set<Int> = emptySet(),
 ) {
     fun toSettings(): TableSettings? {
         val defaults = TableSettings()
         val start = startingBalance.toIntOrNull() ?: return null
-        val common = defaults.copy(game = game, startingBalance = start, currency = currency.trim().ifEmpty { "₹" })
+        val common = defaults.copy(game = game, startingBalance = start)
         return if (game == GameType.POKER) {
             common.copy(
                 smallBlind = smallBlind.toIntOrNull() ?: return null,
@@ -73,6 +76,8 @@ data class SettingsInput(
                 maxSeenBet = chaalLimit.ifBlank { "0" }.toIntOrNull() ?: return null,
                 potLimit = potLimit.ifBlank { "0" }.toIntOrNull() ?: return null,
                 maxBlindTurns = blindLimit.ifBlank { "0" }.toIntOrNull() ?: return null,
+                variant = variant,
+                jokerRanks = if (variant == Variant.JOKER) jokerRanks else emptySet(),
             )
         }
     }
@@ -97,7 +102,8 @@ data class SettingsInput(
             betLimit = settings.betLimit,
             ante = settings.ante.toString(),
             anteStyle = settings.anteStyle,
-            currency = settings.currency,
+            variant = settings.variant,
+            jokerRanks = settings.jokerRanks,
         )
     }
 }
@@ -169,10 +175,6 @@ fun SettingsFields(input: SettingsInput, onChange: (SettingsInput) -> Unit, modi
                 },
                 modifier = Modifier.padding(bottom = 8.dp),
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                CurrencyField(input, onChange, Modifier.weight(1f))
-                Spacer(Modifier.weight(1f))
-            }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 NumberField(
@@ -199,22 +201,21 @@ fun SettingsFields(input: SettingsInput, onChange: (SettingsInput) -> Unit, modi
                     "Blind turns", input.blindLimit, { onChange(input.copy(blindLimit = it)) },
                     Modifier.weight(1f), supportingText = "Max blind bets, 0 = none",
                 )
-                CurrencyField(input, onChange, Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
             }
+            Text("Which hand wins", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+            VariantPicker(
+                variant = input.variant,
+                jokerRanks = input.jokerRanks,
+                onVariant = { onChange(input.copy(variant = it)) },
+                onJokerRanks = { onChange(input.copy(jokerRanks = it)) },
+            )
+            Hint(
+                "Used when players enter their cards, to check side shows and shows. Change it between rounds for dealer's choice.",
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
         }
     }
-}
-
-@Composable
-private fun CurrencyField(input: SettingsInput, onChange: (SettingsInput) -> Unit, modifier: Modifier) {
-    OutlinedTextField(
-        value = input.currency,
-        onValueChange = { onChange(input.copy(currency = it.take(4))) },
-        label = { Text("Currency") },
-        singleLine = true,
-        supportingText = { Text("Shown before amounts") },
-        modifier = modifier,
-    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -301,10 +302,10 @@ fun HostSetupScreen(
 /** Short explanation of the betting rules the app follows. */
 @Composable
 fun RulesText(settings: TableSettings) {
-    fun m(amount: Int) = com.threepatti.core.formatMoney(amount, settings.currency)
+    fun m(amount: Int) = com.threepatti.core.formatChipCount(amount)
     val lines = if (settings.isPoker) {
         listOf(
-            "The two players after the dealer post the blinds, ${m(settings.smallBlind)} and ${m(settings.bigBlind)}. " +
+            "The two players after the dealer post the blinds, ${settings.smallBlind} and ${m(settings.bigBlind)}. " +
                 "The dealer button moves one seat every hand.",
             *listOfNotNull(
                 when {
@@ -333,7 +334,20 @@ fun RulesText(settings: TableSettings) {
             "Raise doubles the stake for everyone after you.",
             "Side show: a seen player can ask the previous seen player to compare cards privately. The weaker hand packs.",
             "Show: when 2 players are left, either can pay one bet to show. The host enters who won.",
+            "All in: short of chips for your bet? Put in all you have and stay in. You can win the pot up to then; " +
+                "what others bet after goes to a side pot.",
+            "After seeing your cards you can enter them. Only you see them until a side show or show, when the app " +
+                "says who won and the host confirms.",
             "Hands from best: trail, pure sequence, sequence, color, pair, high card. A-K-Q is the top sequence, then A-2-3.",
+            *listOfNotNull(
+                when (settings.variant) {
+                    Variant.CLASSIC -> null
+                    Variant.MUFLIS -> "Muflis: the order is reversed and the lowest hand wins, so 5-3-2 of mixed suits is best."
+                    Variant.AK47 -> "AK47: aces, kings, 4s and 7s are jokers. Each stands for whatever card makes the best hand."
+                    Variant.JOKER -> "Joker: every ${settings.jokerRanks.sorted().joinToString("/") { rankLabel(it) }} is a " +
+                        "joker and stands for whatever card makes the best hand."
+                },
+            ).toTypedArray(),
         )
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

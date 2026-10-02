@@ -55,6 +55,6 @@ class SettlementTest {
         assertEquals("Boot can't be more than the starting chips", TableSettings(startingBalance = 10, bootAmount = 20).validationError())
         assertEquals("Pot limit must be more than 10", TableSettings(potLimit = 10).validationError())
         assertNull(TableSettings(maxSeenBet = 0, potLimit = 0).validationError())
-        assertEquals("Boot ₹5 · chaal limit ₹80 · no pot limit", TableSettings().summary())
+        assertEquals("Boot 5 · chaal limit 80 · no pot limit", TableSettings().summary())
     }
 }

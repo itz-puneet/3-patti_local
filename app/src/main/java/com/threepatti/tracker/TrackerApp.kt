@@ -44,6 +44,11 @@ class Prefs(context: Context) {
         get() = prefs.getBoolean(KEY_VIBRATE, true)
         set(value) = prefs.edit().putBoolean(KEY_VIBRATE, value).apply()
 
+    /** Open the card picker when this player sees their 3 Patti cards. */
+    var askForCards: Boolean
+        get() = prefs.getBoolean(KEY_ASK_FOR_CARDS, true)
+        set(value) = prefs.edit().putBoolean(KEY_ASK_FOR_CARDS, value).apply()
+
     /** The Table tab shows a drawn table (true) or a list of players (false). */
     var tableView: Boolean
         get() = prefs.getBoolean(KEY_TABLE_VIEW, true)
@@ -55,5 +60,6 @@ class Prefs(context: Context) {
         const val KEY_LAST_HOST = "last_host"
         const val KEY_TABLE_VIEW = "table_view"
         const val KEY_VIBRATE = "vibrate_on_turn"
+        const val KEY_ASK_FOR_CARDS = "ask_for_cards"
     }
 }

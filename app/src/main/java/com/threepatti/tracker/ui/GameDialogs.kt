@@ -37,8 +37,11 @@ import com.threepatti.core.GameState
 import com.threepatti.core.HandStatus
 import com.threepatti.core.PokerRules
 import com.threepatti.core.RoundPhase
+import com.threepatti.core.Rules
 import com.threepatti.core.TableSettings
-import com.threepatti.core.formatSignedMoney
+import com.threepatti.core.enteredCards
+import com.threepatti.core.formatSignedChips
+import com.threepatti.core.handRules
 import com.threepatti.core.namesOf
 import com.threepatti.core.summary
 
@@ -128,25 +131,27 @@ fun GameDialogs(
         GameDialog.DecideWinner -> {
             val round = state.round
             val sideShow = round?.sideShow?.takeIf { round.phase == RoundPhase.SIDE_SHOW_COMPARE }
-            val ids = when {
-                sideShow != null -> listOf(sideShow.requesterId, sideShow.targetId)
-                round?.phase == RoundPhase.SHOWDOWN && !poker -> round.showdownIds
-                else -> null
-            }
+            // After an all-in the show is decided pot by pot: only that pot's players are compared.
+            val pot = round?.pots?.getOrNull(round.potWinners.size)
+            val ids = round?.takeIf { !poker }?.let { Rules.comparedIds(it) }?.takeIf { it.isNotEmpty() }
             if (round == null || ids == null) {
                 // The show was settled in the meantime.
                 LaunchedEffect(Unit) { onDismiss() }
             } else {
                 DecideWinnerDialog(
-                    title = if (sideShow != null) "Decide the side show" else "Decide the show",
+                    title = when {
+                        sideShow != null -> "Decide the side show"
+                        pot != null -> "Decide the ${PokerRules.potLabel(round, round.potWinners.size).lowercase()}"
+                        else -> "Decide the show"
+                    },
                     seats = ids.map { HandSeat(it, state.nameOf(it)) },
                     sideShowAsker = sideShow?.requesterId,
                     canAddHands = false,
                     declareText = { winners ->
                         when {
                             sideShow != null -> "${state.nameOf(winners[0])} wins the side show"
-                            winners.size == 1 -> "Give ${state.money(round.pot)} to ${state.nameOf(winners[0])}"
-                            else -> "Split ${state.money(round.pot)} between ${state.namesOf(winners)}"
+                            winners.size == 1 -> "Give ${state.chipCount(pot?.amount ?: round.pot)} to ${state.nameOf(winners[0])}"
+                            else -> "Split ${state.chipCount(pot?.amount ?: round.pot)} between ${state.namesOf(winners)}"
                         }
                     },
                     onDeclare = if (session.isHost) {
@@ -155,6 +160,10 @@ fun GameDialogs(
                         null
                     },
                     onDismiss = onDismiss,
+                    // Start from the cards players entered, where this phone may see them.
+                    initialCards = ids.mapNotNull { id -> round.hand(id)?.enteredCards()?.let { id to it } }.toMap(),
+                    initialVariant = state.settings.variant,
+                    initialJokerRanks = state.settings.jokerRanks,
                 )
             }
         }
@@ -166,7 +175,32 @@ fun GameDialogs(
             declareText = { "" },
             onDeclare = null,
             onDismiss = onDismiss,
+            initialVariant = state.settings.variant,
+            initialJokerRanks = state.settings.jokerRanks,
         )
+        is GameDialog.EnterCards -> {
+            val hand = state.round
+                ?.takeIf { it.isActive && it.number == dialog.roundNumber }
+                ?.hand(dialog.playerId)
+                ?.takeIf { it.status != HandStatus.PACKED }
+            if (hand == null) {
+                // The round ended or the player packed meanwhile.
+                LaunchedEffect(Unit) { onDismiss() }
+            } else {
+                val mine = dialog.playerId == myId
+                MyCardsDialog(
+                    title = if (mine) "Your cards" else "${state.nameOf(dialog.playerId)}'s cards",
+                    hint = (if (mine) "Only you can see them. " else "Only this phone shows them. ") +
+                        "In a side show the other player sees them, and at a show everyone does. The app then works out " +
+                        "who won and the host confirms. Shown cards can't be changed.",
+                    initial = hand.enteredCards(),
+                    rules = state.settings.handRules,
+                    dismissLabel = if (dialog.afterSeeing) "Skip" else "Cancel",
+                    onSave = { cards -> submit(GameAction.EnterCards(dialog.playerId, cards.map { it.code })) },
+                    onDismiss = onDismiss,
+                )
+            }
+        }
         GameDialog.LeaveTable -> ConfirmDialog(
             title = "Leave the table?",
             text = "Your seat and chips stay with the host. Join again from this phone to get them back.",
@@ -210,13 +244,36 @@ fun GameDialogs(
             onConfirm = { submit(GameAction.RemovePlayer(dialog.playerId)) },
             onDismiss = onDismiss,
         )
+        is GameDialog.ConfirmAllIn -> {
+            val chips = state.player(dialog.playerId)?.balance ?: 0
+            val who = if (dialog.playerId == myId) "your" else "${state.nameOf(dialog.playerId)}'s"
+            if (poker) {
+                val allInTo = (state.round?.hand(dialog.playerId)?.streetBet ?: 0) + chips
+                ConfirmDialog(
+                    title = "Go all in?",
+                    text = "Bet all $who ${state.chipCount(chips)}. You can only win what each other player matches.",
+                    confirmLabel = "All in",
+                    onConfirm = { submit(GameAction.RaiseTo(dialog.playerId, allInTo)) },
+                    onDismiss = onDismiss,
+                )
+            } else {
+                ConfirmDialog(
+                    title = "Go all in?",
+                    text = "Put in $who last ${state.chipCount(chips)} and stay in the round. You can win the pot as it is " +
+                        "now; what others bet after this goes to a side pot that only they can win.",
+                    confirmLabel = "All in",
+                    onConfirm = { submit(GameAction.AllIn(dialog.playerId)) },
+                    onDismiss = onDismiss,
+                )
+            }
+        }
         is GameDialog.ConfirmPack -> {
             val invested = state.round?.hand(dialog.playerId)?.invested ?: 0
             val mine = dialog.playerId == myId
             val verb = if (poker) "Fold" else "Pack"
             ConfirmDialog(
                 title = if (mine) "$verb your hand?" else "$verb ${state.nameOf(dialog.playerId)}'s hand?",
-                text = "The ${state.money(invested)} already in the pot stays there.",
+                text = "The ${state.chipCount(invested)} already in the pot stay there.",
                 confirmLabel = verb,
                 destructive = true,
                 onConfirm = { submit(GameAction.Pack(dialog.playerId)) },
@@ -240,7 +297,7 @@ fun GameDialogs(
                 val index = round.potWinners.size
                 val pot = round.pots.getOrNull(index)
                 val label = PokerRules.potLabel(round, index).lowercase()
-                val amount = state.money(pot?.amount ?: 0)
+                val amount = state.chipCount(pot?.amount ?: 0)
                 ConfirmDialog(
                     title = if (ids.size == 1) "${state.nameOf(ids[0])} wins the $label?" else "Split the $label?",
                     text = if (ids.size == 1) {
@@ -253,7 +310,7 @@ fun GameDialogs(
                     onDismiss = onDismiss,
                 )
             } else {
-                val pot = state.money(round?.pot ?: 0)
+                val pot = state.chipCount(round?.pot ?: 0)
                 ConfirmDialog(
                     title = if (ids.size == 1) "${state.nameOf(ids[0])} wins?" else "Split the pot?",
                     text = if (ids.size == 1) {
@@ -288,15 +345,14 @@ private fun PlayerMenuDialog(
     }
     val round = state.round
     val hand = round?.takeIf { it.isActive }?.hand(playerId)
-    val currency = state.settings.currency
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(player.name + if (isMe) " (you)" else "") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "Chips ${state.money(player.balance)} · bought ${state.money(player.buyIn)} · " +
-                        formatSignedMoney(player.net, currency),
+                    "Chips ${state.chips(player.balance)} · took ${state.chips(player.buyIn)} · " +
+                        formatSignedChips(player.net),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
@@ -359,12 +415,12 @@ private fun ChipsDialog(state: GameState, playerId: String, onConfirm: (Int) -> 
         title = { Text("Chips for ${player.name}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Has ${state.money(player.balance)} now.", style = MaterialTheme.typography.bodyMedium)
-                Hint("Add when they buy more chips. Take when they cash out. The ledger stays correct either way.")
+                Text("Has ${state.chipCount(player.balance)} now.", style = MaterialTheme.typography.bodyMedium)
+                Hint("Add when they take more chips. Take when they give chips back. The ledger stays correct either way.")
                 NumberField("Amount", amountText, { amountText = it })
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     quick.forEach { value ->
-                        AssistChip(onClick = { amountText = value.toString() }, label = { Text(state.money(value)) })
+                        AssistChip(onClick = { amountText = value.toString() }, label = { Text(state.chips(value)) })
                     }
                 }
             }

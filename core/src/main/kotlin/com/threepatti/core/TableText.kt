@@ -25,10 +25,11 @@ fun describeRound(state: GameState, round: Round): String {
             "${state.nameOf(sideShow?.requesterId)} asked ${state.nameOf(sideShow?.targetId)} for a side show"
         RoundPhase.SIDE_SHOW_COMPARE ->
             "${state.nameOf(sideShow?.requesterId)} and ${state.nameOf(sideShow?.targetId)} are comparing cards"
-        RoundPhase.SHOWDOWN -> if (state.settings.isPoker) {
+        RoundPhase.SHOWDOWN -> if (state.settings.isPoker || round.pots.isNotEmpty()) {
             val index = round.potWinners.size
             val pot = round.pots.getOrNull(index)
-            if (pot == null) "Showdown" else "Showdown · ${PokerRules.potLabel(round, index)} ${state.money(pot.amount)}"
+            val show = if (state.settings.isPoker) "Showdown" else "Show"
+            if (pot == null) show else "$show · ${PokerRules.potLabel(round, index)}: ${state.chipCount(pot.amount)}"
         } else {
             "Show: " + round.showdownIds.joinToString(" vs ") { state.nameOf(it) }
         }
@@ -38,14 +39,14 @@ fun describeRound(state: GameState, round: Round): String {
 
 fun winnerText(state: GameState, round: Round): String {
     val contestedPots = round.pots.count { !(it.eligibleIds.size == 1 && round.pots.size > 1) }
-    if (state.settings.isPoker && round.winnerIds.size > 1 && contestedPots > 1) {
+    if (round.pots.isNotEmpty() && round.winnerIds.size > 1 && contestedPots > 1) {
         // Different pots went to different players.
         val won = PokerEngine.contestedWinnings(round)
-        return round.winnerIds.joinToString { "${state.nameOf(it)} won ${state.money(won[it] ?: 0)}" }
+        return round.winnerIds.joinToString { "${state.nameOf(it)} won ${state.chipCount(won[it] ?: 0)}" }
     }
     return if (round.winnerIds.size == 1) {
-        "${state.nameOf(round.winnerIds[0])} won ${state.money(round.pot)}"
+        "${state.nameOf(round.winnerIds[0])} won ${state.chipCount(round.pot)}"
     } else {
-        "${state.namesOf(round.winnerIds)} split ${state.money(round.pot)}"
+        "${state.namesOf(round.winnerIds)} split ${state.chipCount(round.pot)}"
     }
 }

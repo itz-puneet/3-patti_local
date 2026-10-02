@@ -61,12 +61,12 @@ When asked about app signing, let Google manage the app signing key (the default
 
 **Short description** (80 characters max)
 
-> Track chips, bets and the pot for 3 Patti and poker played with real cards
+> Track chips, bets and the pot for 3 Patti and poker. Just chips, no money.
 
 **Full description**
 
-> 3 Patti Chips Handler keeps track of chips while you play 3 Patti (Teen Patti) or poker with real
-> cards. No more paper slips, coins or arguments about who owes whom.
+> 3 Patti Chips Handler keeps track of chips while you play 3 Patti (Teen Patti) or poker with a deck
+> of cards. No more paper slips or arguments about the pot.
 >
 > One phone hosts the table and everyone else joins from their own phone on the same WiFi or the
 > host's hotspot. No internet or account needed. Friends with an iPhone join from Safari by scanning a
@@ -76,6 +76,9 @@ When asked about app signing, let Google manage the app signing key (the default
 > • Boot collected automatically every round
 > • Blind and seen (chaal) bets, raises, chaal limit and pot limit
 > • Show and side show
+> • All in when you're short of chips, with side pots worked out for you
+> • Enter your own cards after seeing them. Only you see them until a side show or show; then the app
+>   says who won and the host confirms with one tap
 > • Not sure who won? Enter the cards and Decide winner names each hand and the winner: trail, pure
 >   sequence, sequence, color, pair or high card
 > • Muflis, AK47 and Joker variants, with jokers worked out for you
@@ -98,11 +101,11 @@ When asked about app signing, let Google manage the app signing key (the default
 > • The table is saved automatically, so you can resume after closing the app
 >
 > AT THE END
-> • A ledger with everyone's profit or loss
-> • A settle-up list of who owes whom
+> • A ledger of everyone's chips, up or down
+> • An even-out list of who hands chips to whom
 >
-> The app only counts chips. There is no betting with real money in the app, no online play, no ads
-> and no in-app purchases.
+> The app only counts chips. There is no money in the app, no online play, no ads and no in-app
+> purchases.
 
 **Graphics** (in this folder)
 
@@ -110,7 +113,7 @@ When asked about app signing, let Google manage the app signing key (the default
 | --- | --- |
 | App icon, 512 × 512 | `icon-512.png` |
 | Feature graphic, 1024 × 500 | `feature-graphic.png` |
-| Phone screenshots | `screenshots/01-table.png` to `06-home.png` |
+| Phone screenshots | `screenshots/01-table.png` to `08-show-confirm.png` |
 
 **Category**: Entertainment. **Tags**: card games, scorekeeper.
 
@@ -123,13 +126,16 @@ Play Console → **Policy → App content**. Answer for what the app really does
 - **App access**: All features work without logging in.
 - **Content rating**: fill in the questionnaire. The app has no violence, sexual content, bad
   language, drugs, user-to-user chat or internet sharing. It is a score keeper for card games; it does
-  not deal cards, run games of chance, or take or pay out money.
+  not deal cards, run games of chance, or take or pay out money. It does use betting words (bet, pot,
+  chips), so if the questionnaire asks about gambling themes or simulated gambling, answer yes. That
+  only raises the age rating, which suits an adults-only app.
 - **Target audience**: 18 and over. The app is about games played for stakes, so keep it adults only;
   this also keeps it out of the Families programme.
 - **Data safety**: the app has no accounts, ads or analytics and sends nothing to you or any server.
   Player names and chips go only directly to the other phones at the same table, on the local WiFi the
-  players choose. On that basis the answer is *No, the app doesn't collect or share user data*. Data
-  is deleted by deleting the table or uninstalling the app.
+  players choose. 3 Patti cards a player enters go only to the host's phone, which keeps them hidden
+  until a side show or show. On that basis the answer is *No, the app doesn't collect or share user
+  data*. Data is deleted by deleting the table or uninstalling the app.
 - **Advertising ID**: not used.
 - **Government app, financial features, health, news**: none.
 - **Foreground service permissions**: declare *Connected device*. Description you can use:
@@ -139,6 +145,22 @@ Play Console → **Policy → App content**. Answer for what the app really does
   table is closed." Play asks for a short video: record the host opening a table, the notification
   appearing, and another phone joining and staying connected with the host's screen off. Upload it to
   YouTube as *unlisted* and paste the link.
+
+## Policy check
+
+Checked against Google Play's Developer Program Policies in October 2026.
+
+| Policy | What the app does | Result |
+| --- | --- | --- |
+| Real-money gambling | Counts chips for games played in person with a deck of cards. No money, payments, prizes or links to betting sites. | OK. Earlier versions showed ₹ amounts and said "bought", "cash out" and "settle up, who owes whom", which could read as tracking money bets. All of that is now chips only: "took", "gave back" and "Even out". |
+| Simulated gambling and age rating | A score keeper, not a casino game, but it uses betting words. | OK with an honest rating questionnaire and an 18+ target audience (above). |
+| Store listing and screenshots | Listing, screenshots and feature graphic show chips only. "Teen Patti" is the game's name, not a brand. | OK. Keep money words (₹, cash, win money, who owes whom) out of future listing text and screenshots. |
+| User data | Nothing leaves the local WiFi. Entered cards stay hidden on the host's phone until shown. | OK, matches the privacy policy and the Data safety answers. |
+| Permissions | Only normal permissions, plus notifications. No location, contacts, camera, files or SMS. | OK. |
+| Foreground service | A `connectedDevice` service keeps the host's table running for the other phones. | Needs the declaration and video in section 5. If Play ever refuses that type, the app can do without the service; the host would then keep the app open. |
+| Target API level | Targets Android 16 (API 36). | OK, the newest level Play asks for. |
+| 16 KB memory pages | The only native code is a small library that comes with Android's Compose toolkit. | OK, checked: it is built and packed for 16 KB pages. |
+| Families and ads | No ads, not aimed at children. | OK with the 18+ target audience. |
 
 ## 6. Test, then release
 

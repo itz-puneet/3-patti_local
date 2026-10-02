@@ -105,7 +105,7 @@ class HostTableSession(
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
     override val isHost = true
-    override val state: StateFlow<GameState?> = table.state
+    override val state: StateFlow<GameState?> = table.hostView
     override val myPlayerId: StateFlow<String?> = MutableStateFlow(table.hostPlayerId)
     override val connection: StateFlow<ConnectionStatus> = MutableStateFlow(ConnectionStatus.Connected)
     override val canUndo: StateFlow<Boolean> = table.canUndo

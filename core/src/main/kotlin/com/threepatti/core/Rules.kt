@@ -28,6 +28,12 @@ data class SeatOptions(
     val sideShowError: String?,
     /** Set when this seat has to accept or refuse a side show from that player. */
     val answerSideShowFrom: String?,
+    /** All the chips left aren't enough for the blind or chaal: the player can put them all in. */
+    val canAllIn: Boolean = false,
+    val allInAmount: Int = 0,
+    val isAllIn: Boolean = false,
+    /** The player may enter or change their own cards now. */
+    val canEnterCards: Boolean = false,
 ) {
     companion object {
         fun notPlaying(playerId: String) = SeatOptions(
@@ -54,6 +60,76 @@ object Rules {
 
     fun potLimitReached(settings: TableSettings, round: Round): Boolean =
         settings.potLimit > 0 && round.pot >= settings.potLimit
+
+    /**
+     * The pots of a 3 Patti show after someone went all in, main pot first. Each all-in closes a pot at
+     * the size it had then; later bets build the next pot, which that player can't win. Packed players
+     * win nothing, and pots with the same players in them are one pot.
+     */
+    fun sidePots(round: Round): List<Pot> {
+        val active = round.activeHands.map { it.playerId }
+        val pots = mutableListOf<Pot>()
+        val out = mutableSetOf<String>()
+        var from = 0
+        fun closeAt(upTo: Int) {
+            val amount = upTo - from
+            if (amount <= 0) return
+            from = upTo
+            val eligible = active.filter { it !in out }
+            val last = pots.lastOrNull()
+            pots += when {
+                last == null -> Pot(amount, eligible.ifEmpty { active })
+                // Chips that only all-in or packed players were in for go to the pot before.
+                eligible.isEmpty() || eligible == last.eligibleIds -> pots.removeAt(pots.lastIndex).let {
+                    it.copy(amount = it.amount + amount)
+                }
+                else -> Pot(amount, eligible)
+            }
+        }
+        for (cut in round.allInBreaks) {
+            closeAt(cut.potAt)
+            out += cut.playerIds
+        }
+        closeAt(round.pot)
+        return pots
+    }
+
+    /** Players whose cards are on show: the two in a side show (to each other), or everyone in a show. */
+    fun showingCards(round: Round): List<String> = when (round.phase) {
+        RoundPhase.SIDE_SHOW_COMPARE -> round.sideShow?.let { listOf(it.requesterId, it.targetId) }.orEmpty()
+        RoundPhase.SHOWDOWN, RoundPhase.FINISHED -> round.showdownIds
+        else -> emptyList()
+    }
+
+    /** The players whose hands decide what the host must enter now: the side show pair, or the pot being decided. */
+    fun comparedIds(round: Round): List<String> = when (round.phase) {
+        RoundPhase.SIDE_SHOW_COMPARE -> showingCards(round)
+        RoundPhase.SHOWDOWN -> round.pots.getOrNull(round.potWinners.size)?.eligibleIds ?: round.showdownIds
+        else -> emptyList()
+    }
+
+    /** Why [playerId] can't enter or change their own cards now, or null when they can. */
+    fun enterCardsError(state: GameState, playerId: String): String? {
+        val round = state.round?.takeIf { it.isActive } ?: return "No round is running"
+        val name = state.nameOf(playerId)
+        val hand = round.hand(playerId) ?: return "$name is not in this round"
+        if (hand.status == HandStatus.PACKED) return "$name has packed"
+        val showingNow = playerId in showingCards(round)
+        if (hand.status == HandStatus.BLIND && !showingNow) return "See your cards first"
+        if (hand.cards.isNotEmpty() && (hand.cardsShown || showingNow)) return "$name's cards were shown, so they can't change"
+        return null
+    }
+
+    /** Next player after [fromId] (in seat order) who can still bet: not packed and not all in. */
+    fun nextToAct(round: Round, fromId: String?): Hand? {
+        val hands = round.hands
+        val start = hands.indexOfFirst { it.playerId == fromId }
+        for (i in 1..hands.size) {
+            val hand = hands[(start + i).mod(hands.size)]
+            if (hand.status != HandStatus.PACKED && !hand.allIn && hand.playerId != fromId) return hand
+        }
+        return null
+    }
 
     /** Next player after [fromId] (in seat order) who has not packed. */
     fun nextActive(round: Round, fromId: String?): Hand? {
@@ -102,6 +178,23 @@ object Rules {
         }
         if (raise && !canRaise(state.settings, round)) return "Chaal limit reached, no more raises"
         return chipsError(state, playerId, betAmount(round, hand, raise))
+    }
+
+    /** Going all in is only for a player whose chips don't cover the blind or chaal. */
+    fun allInError(state: GameState, playerId: String): String? {
+        turnError(state, playerId)?.let { return it }
+        val round = state.round!!
+        val hand = round.hand(playerId)!!
+        val blindLimit = state.settings.maxBlindTurns
+        if (hand.status == HandStatus.BLIND && blindLimit > 0 && hand.blindTurns >= blindLimit) {
+            return "Blind limit reached. See your cards to continue"
+        }
+        val balance = state.player(playerId)?.balance ?: 0
+        if (balance <= 0) return "${state.nameOf(playerId)} has no chips left"
+        if (balance >= callAmount(round, hand)) {
+            return "${state.nameOf(playerId)} has enough chips to play ${if (hand.status == HandStatus.BLIND) "blind" else "chaal"}"
+        }
+        return null
     }
 
     fun showError(state: GameState, playerId: String): String? {
@@ -154,13 +247,17 @@ object Rules {
             answerSideShowFrom = round.sideShow
                 ?.takeIf { round.phase == RoundPhase.SIDE_SHOW_REQUESTED && it.targetId == playerId }
                 ?.requesterId,
+            canAllIn = isTurn && allInError(state, playerId) == null,
+            allInAmount = state.player(playerId)?.balance ?: 0,
+            isAllIn = hand.allIn,
+            canEnterCards = !state.settings.isPoker && enterCardsError(state, playerId) == null,
         )
     }
 
     private fun chipsError(state: GameState, playerId: String, amount: Int): String? {
         val player = state.player(playerId) ?: return "Player not found"
         return if (player.balance < amount) {
-            "${player.name} needs ${state.money(amount)} but has only ${state.money(player.balance)}"
+            "${player.name} needs ${state.chipCount(amount)} but has only ${state.chips(player.balance)}"
         } else {
             null
         }
@@ -173,15 +270,15 @@ fun TableSettings.gameName(): String = when {
     else -> "no-limit poker"
 }
 
-/** "ante ₹1" or "big blind ante ₹1 each", or null without an ante. */
+/** "ante 1" or "big blind ante 1 each", or null without an ante. */
 fun TableSettings.anteText(): String? = when {
     !isPoker || ante <= 0 -> null
-    anteStyle == AnteStyle.BIG_BLIND -> "big blind ante ${formatMoney(ante, currency)} each"
-    else -> "ante ${formatMoney(ante, currency)}"
+    anteStyle == AnteStyle.BIG_BLIND -> "big blind ante ${formatChips(ante)} each"
+    else -> "ante ${formatChips(ante)}"
 }
 
 fun TableSettings.summary(): String {
-    fun m(amount: Int) = formatMoney(amount, currency)
+    fun m(amount: Int) = formatChips(amount)
     if (isPoker) {
         return listOfNotNull(
             "Blinds ${m(smallBlind)}/${m(bigBlind)}",
@@ -194,5 +291,13 @@ fun TableSettings.summary(): String {
         if (maxSeenBet > 0) "chaal limit ${m(maxSeenBet)}" else "no chaal limit",
         if (potLimit > 0) "pot limit ${m(potLimit)}" else "no pot limit",
         if (maxBlindTurns > 0) "max $maxBlindTurns blind turns" else null,
+        variantText(),
     ).joinToString(" · ")
+}
+
+/** "Muflis" or "Joker (7, A)", or null for classic 3 Patti and for poker. */
+fun TableSettings.variantText(): String? = when {
+    isPoker || variant == Variant.CLASSIC -> null
+    variant == Variant.JOKER -> "Joker (${jokerRanks.sorted().joinToString { rankLabel(it) }})"
+    else -> variant.label
 }

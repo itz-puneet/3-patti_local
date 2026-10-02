@@ -155,14 +155,14 @@ object PokerRules {
         val allInTo = hand.streetBet + balance
         if (hand.raiseClosed) return "You can only call or fold after a short all-in"
         if (raiseTo <= round.currentBet) {
-            return if (round.currentBet == 0) "Bet at least ${state.money(state.settings.bigBlind)}" else "A raise must be more than ${state.money(round.currentBet)}"
+            return if (round.currentBet == 0) "Bet at least ${state.chips(state.settings.bigBlind)}" else "A raise must be more than ${state.chips(round.currentBet)}"
         }
-        if (raiseTo > allInTo) return "${state.nameOf(playerId)} has only ${state.money(balance)} left"
+        if (raiseTo > allInTo) return "${state.nameOf(playerId)} has only ${state.chipCount(balance)} left"
         val maxTo = maxRaiseTo(state.settings, round, hand, balance)
-        if (raiseTo > maxTo) return "Pot limit: the most you can make it is ${state.money(maxTo)}"
+        if (raiseTo > maxTo) return "Pot limit: the most you can make it is ${state.chips(maxTo)}"
         val minTo = if (round.currentBet == 0) state.settings.bigBlind else round.currentBet + round.minRaise
         if (raiseTo < minTo && raiseTo != allInTo) {
-            return if (round.currentBet == 0) "Bet at least ${state.money(minTo)}" else "Raise to at least ${state.money(minTo)}"
+            return if (round.currentBet == 0) "Bet at least ${state.chips(minTo)}" else "Raise to at least ${state.chips(minTo)}"
         }
         return null
     }

@@ -3,6 +3,7 @@ package com.threepatti.core.net
 import com.threepatti.core.Actor
 import com.threepatti.core.TableHost
 import com.threepatti.core.gameName
+import com.threepatti.core.visibleTo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -115,7 +116,7 @@ class HostServer(
             val playerId = table.join(hello.deviceId, hello.name)
             connection.playerId = playerId
             connection.send(ServerMessage.Welcome(playerId))
-            connection.send(ServerMessage.State(table.state.value))
+            connection.send(ServerMessage.State(table.state.value.visibleTo(playerId)))
             connection.startWriter()
             connections.put(playerId, connection)?.close()
             table.setConnected(playerId, true)
@@ -145,7 +146,7 @@ class HostServer(
                 if (state.player(connection.playerId) == null) {
                     connection.send(ServerMessage.Goodbye("The host removed you from the table"))
                 } else {
-                    connection.send(ServerMessage.State(state))
+                    connection.send(ServerMessage.State(state.visibleTo(connection.playerId)))
                 }
             }
         }

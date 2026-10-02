@@ -55,7 +55,7 @@ internal object PokerEngine {
         var next = state
         for (id in ids) next = postAnte(next, id, settings.ante, null)
         val allIn = ids.filter { next.round!!.hand(it)!!.allIn }
-        next = next.withLog("Everyone antes ${state.money(settings.ante)}")
+        next = next.withLog("Everyone antes ${state.chipCount(settings.ante)}")
         if (allIn.isNotEmpty()) next = next.withLog("${next.namesOf(allIn)} ${if (allIn.size == 1) "is" else "are"} all-in from the ante")
         return next
     }
@@ -68,7 +68,7 @@ internal object PokerEngine {
         return if (label == null) {
             next
         } else {
-            next.withLog("${state.nameOf(playerId)} posts $label ${state.money(amount)}${if (allIn) " and is all-in" else ""}")
+            next.withLog("${state.nameOf(playerId)} posts $label ${state.chips(amount)}${if (allIn) " and is all-in" else ""}")
         }
     }
 
@@ -79,7 +79,7 @@ internal object PokerEngine {
         var next = state.pay(playerId, amount).updateHand(playerId) { it.copy(streetBet = it.streetBet + amount) }
         val allIn = next.player(playerId)!!.balance == 0
         if (allIn) next = next.updateHand(playerId) { it.copy(allIn = true) }
-        return next.withLog("${state.nameOf(playerId)} posts the $label ${state.money(amount)}${if (allIn) " and is all-in" else ""}")
+        return next.withLog("${state.nameOf(playerId)} posts the $label ${state.chips(amount)}${if (allIn) " and is all-in" else ""}")
     }
 
     fun check(state: GameState, playerId: String): GameState {
@@ -87,7 +87,7 @@ internal object PokerEngine {
         val round = state.round!!
         val hand = round.hand(playerId)!!
         if (hand.streetBet < round.currentBet) {
-            fail("You need to call ${state.money(round.currentBet - hand.streetBet)} or fold")
+            fail("You need to call ${state.chipCount(round.currentBet - hand.streetBet)} or fold")
         }
         val next = state.updateHand(playerId) { it.copy(acted = true) }.withLog("${state.nameOf(playerId)} checks")
         return continueBetting(next, playerId)
@@ -103,7 +103,7 @@ internal object PokerEngine {
         var next = state.pay(playerId, amount).updateHand(playerId) { it.copy(streetBet = it.streetBet + amount, acted = true) }
         val allIn = next.player(playerId)!!.balance == 0
         if (allIn) next = next.updateHand(playerId) { it.copy(allIn = true) }
-        next = next.withLog("${state.nameOf(playerId)} calls ${state.money(amount)}${if (allIn) " and is all-in" else ""}")
+        next = next.withLog("${state.nameOf(playerId)} calls ${state.chips(amount)}${if (allIn) " and is all-in" else ""}")
         return continueBetting(next, playerId)
     }
 
@@ -138,9 +138,9 @@ internal object PokerEngine {
         }
         val name = state.nameOf(playerId)
         val text = when {
-            allIn -> "$name is all-in for ${state.money(raiseTo)}"
-            isBet -> "$name bets ${state.money(raiseTo)}"
-            else -> "$name raises to ${state.money(raiseTo)}"
+            allIn -> "$name is all-in for ${state.chips(raiseTo)}"
+            isBet -> "$name bets ${state.chips(raiseTo)}"
+            else -> "$name raises to ${state.chips(raiseTo)}"
         }
         return continueBetting(next.withLog(text), playerId)
     }
@@ -191,7 +191,7 @@ internal object PokerEngine {
         }
         val first = PokerRules.nextToAct(reset.round!!, round.dealerId)?.playerId
         return reset.updateRound { it.copy(turnId = first) }
-            .withLog("${PokerRules.streetName(street)}. Pot ${state.money(round.pot)}")
+            .withLog("${PokerRules.streetName(street)}. Pot ${state.chips(round.pot)}")
     }
 
     fun showdown(state: GameState, message: String): GameState {
@@ -224,23 +224,23 @@ internal object PokerEngine {
         val ordered = round.hands.map { it.playerId }.filter { it in winnerIds }
         val label = PokerRules.potLabel(round, index)
         val text = if (ordered.size == 1) {
-            "$label ${state.money(pot.amount)}: ${state.nameOf(ordered.single())} wins"
+            "$label of ${state.chipCount(pot.amount)}: ${state.nameOf(ordered.single())} wins"
         } else {
-            "$label ${state.money(pot.amount)}: split between ${state.namesOf(ordered)}"
+            "$label of ${state.chipCount(pot.amount)}: split between ${state.namesOf(ordered)}"
         }
         val next = state.updateRound { it.copy(potWinners = it.potWinners + listOf(ordered)) }.withLog(text)
         return awardUncontested(next)
     }
 
     /** Pots that only one player can win (chips nobody called) go straight back. Finishes when all are decided. */
-    private fun awardUncontested(state: GameState): GameState {
+    internal fun awardUncontested(state: GameState): GameState {
         var next = state
         while (true) {
             val round = next.round!!
             val pot = round.pots.getOrNull(round.potWinners.size) ?: return finishHand(next)
             val only = pot.eligibleIds.singleOrNull() ?: return next
             next = next.updateRound { it.copy(potWinners = it.potWinners + listOf(listOf(only))) }
-                .withLog("${next.money(pot.amount)} nobody called goes back to ${next.nameOf(only)}")
+                .withLog("${next.nameOf(only)} gets back ${next.chipCount(pot.amount)} nobody called")
         }
     }
 

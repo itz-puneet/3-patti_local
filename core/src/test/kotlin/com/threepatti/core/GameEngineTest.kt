@@ -1,10 +1,12 @@
 package com.threepatti.core
 
 import com.threepatti.core.GameAction.AdjustChips
+import com.threepatti.core.GameAction.AllIn
 import com.threepatti.core.GameAction.AnswerSideShow
 import com.threepatti.core.GameAction.Bet
 import com.threepatti.core.GameAction.CancelRound
 import com.threepatti.core.GameAction.DeclareWinners
+import com.threepatti.core.GameAction.EnterCards
 import com.threepatti.core.GameAction.ForceShow
 import com.threepatti.core.GameAction.MoveSeat
 import com.threepatti.core.GameAction.Pack
@@ -203,7 +205,7 @@ class GameEngineTest {
     fun notEnoughChipsUntilTopUp() {
         var s = table(settings = TableSettings(startingBalance = 12, bootAmount = 5, maxSeenBet = 0)).act(StartRound)
         s = s.act(SeeCards("p2"))
-        assertEquals("Ravi needs ₹10 but has only ₹7", s.rejects(Bet("p2")))
+        assertEquals("Ravi needs 10 chips but has only 7", s.rejects(Bet("p2")))
         s = s.act(AdjustChips("p2", 20))
         assertEquals(27, s.balance("p2"))
         assertEquals(32, s.player("p2")!!.buyIn)
@@ -296,6 +298,125 @@ class GameEngineTest {
         assertEquals("p4", s.round!!.turnId)
     }
 
+    /** Gives a player exactly [chips] chips before the round. */
+    private fun GameState.withChips(id: String, chips: Int): GameState = act(AdjustChips(id, chips - balance(id)))
+
+    @Test
+    fun shortPlayerGoesAllInAndTheRestBuildASidePot() {
+        var s = table("Ravi", "Meena", "Kiran").withChips("p2", 12).act(StartRound)   // Ravi has 7 after the boot
+        s = s.act(Bet("p2")).act(Bet("p3")).act(Bet("p4")).act(Bet("p1"))           // blind 5 each, pot 40
+        val options = Rules.seatOptions(s, "p2")
+        assertEquals("Ravi needs 5 chips but has only 2", options.callError)
+        assertTrue(options.canAllIn)
+        assertEquals(2, options.allInAmount)
+
+        s = s.act(AllIn("p2"))
+        assertEquals("Meena has enough chips to play blind", s.rejects(AllIn("p3")))
+        assertEquals("Ravi is all in with 2 chips", s.log.last().text)
+        assertEquals(listOf(AllInBreak(42, listOf("p2"))), s.round!!.allInBreaks)
+        assertEquals("p3", s.round!!.turnId)
+        s = s.act(Bet("p3")).act(Bet("p4")).act(Bet("p1"))
+        assertEquals("p3", s.round!!.turnId, "all-in Ravi is skipped")
+        assertTrue(Rules.seatOptions(s, "p2").isAllIn)
+
+        s = s.act(Bet("p3")).act(Pack("p4")).act(Pack("p1"))
+        // Only Meena can still bet, so everyone left shows.
+        val round = s.round!!
+        assertEquals(RoundPhase.SHOWDOWN, round.phase)
+        assertEquals(listOf(Pot(42, listOf("p2", "p3")), Pot(20, listOf("p3"))), round.pots)
+        assertEquals("Show · Main pot: 42 chips", describeRound(s, round))
+        s = s.act(DeclareWinners(listOf("p2")))
+        assertEquals(RoundPhase.FINISHED, s.round!!.phase)
+        assertEquals(42, s.balance("p2"))
+        assertEquals(250 - 20 + 20, s.balance("p3"), "Meena gets back the side pot nobody else could win")
+        assertTrue(s.log.any { it.text == "Meena gets back 20 chips nobody called" })
+        assertChipsConserved(s)
+    }
+
+    @Test
+    fun lastChipMakesAPlayerAllIn() {
+        var s = table("Ravi", "Meena").withChips("p2", 10).act(StartRound)
+        s = s.act(Bet("p2"))
+        assertEquals(0, s.balance("p2"))
+        assertTrue(s.round!!.hand("p2")!!.allIn)
+        assertEquals("Ravi is all in", s.log.last().text)
+        s = s.act(Bet("p3"))
+        assertEquals("p1", s.round!!.turnId)
+        // Asha packs, leaving Meena as the only one who can bet: show.
+        s = s.act(Pack("p1"))
+        assertEquals(RoundPhase.SHOWDOWN, s.round!!.phase)
+        assertEquals(listOf("p2", "p3"), s.round!!.showdownIds)
+        // Ravi can win the 20 in the pot when he went all in, not Meena's blind after it.
+        assertEquals(listOf(Pot(20, listOf("p2", "p3")), Pot(5, listOf("p3"))), s.round!!.pots)
+        s = s.act(DeclareWinners(listOf("p2")))
+        assertEquals(20, s.balance("p2"))
+        assertEquals(245, s.balance("p3"))
+        assertChipsConserved(s)
+
+        // Heads-up nobody can bet after Ravi's last chip, so the show starts at once with a single pot.
+        val headsUp = table("Ravi").withChips("p2", 10).act(StartRound).act(Bet("p2"))
+        assertEquals(RoundPhase.SHOWDOWN, headsUp.round!!.phase)
+        assertTrue(headsUp.round!!.pots.isEmpty())
+    }
+
+    @Test
+    fun bootCanPutAPlayerAllIn() {
+        var s = table("Ravi", "Meena", "Kiran").withChips("p2", 5)
+        assertEquals("p1" to "p3", GameEngine.nextDeal(s), "Ravi can't bet after the boot, so Meena goes first")
+        s = s.act(StartRound)
+        assertTrue(s.round!!.hand("p2")!!.allIn)
+        assertEquals("p3", s.round!!.turnId)
+        assertTrue(s.log.any { it.text == "Ravi is all in with the boot" })
+        assertTrue(s.log.any { it.text.startsWith("Round 1 started. Asha deals, Meena goes first.") })
+        // Heads-up, an all-in boot leaves nothing to bet on.
+        val headsUp = table("Ravi").withChips("p2", 5).act(StartRound)
+        assertEquals(RoundPhase.SHOWDOWN, headsUp.round!!.phase)
+        assertEquals(listOf("p1", "p2"), headsUp.round!!.showdownIds)
+    }
+
+    @Test
+    fun twoAllInsMakeAMainPotAndTwoSidePots() {
+        var s = table("Ravi", "Meena", "Kiran").withChips("p2", 12).withChips("p3", 30).act(StartRound)
+        s = s.act(Bet("p2")).act(Bet("p3")).act(Bet("p4")).act(Bet("p1"))
+        s = s.act(AllIn("p2"))                                                     // pot 42
+        s = s.act(SeeCards("p3")).act(Bet("p3")).act(Bet("p4")).act(Bet("p1"))    // pot 62, Meena has 10
+        s = s.act(Bet("p3"))                                                       // chaal with her last 10
+        assertTrue(s.round!!.hand("p3")!!.allIn)
+        s = s.act(Bet("p4")).act(Bet("p1")).act(Pack("p4"))                        // pot 82, only Asha can bet
+        val round = s.round!!
+        assertEquals(
+            listOf(Pot(42, listOf("p1", "p2", "p3")), Pot(30, listOf("p1", "p3")), Pot(10, listOf("p1"))),
+            round.pots,
+        )
+        s = s.act(DeclareWinners(listOf("p2")))
+        assertEquals("Ravi can't win the side pot 1", s.rejects(DeclareWinners(listOf("p2"))))
+        s = s.act(DeclareWinners(listOf("p3")))
+        assertEquals(RoundPhase.FINISHED, s.round!!.phase)
+        assertEquals(42, s.balance("p2"))
+        assertEquals(30, s.balance("p3"))
+        assertEquals(240, s.balance("p1"), "Asha's last bet nobody could match comes back")
+        assertEquals("Ravi won 42 chips, Meena won 30 chips", winnerText(s, s.round!!))
+        assertChipsConserved(s)
+    }
+
+    @Test
+    fun cardsEnteredStayLockedOnceShown() {
+        var s = table("Ravi", "Meena").act(StartRound)
+        assertEquals("See your cards first", s.rejects(EnterCards("p2", listOf("AS", "KS", "QS"))))
+        s = s.act(SeeCards("p2")).act(EnterCards("p2", listOf("AS", "KS", "QS")))
+        assertEquals(listOf("AS", "KS", "QS"), s.round!!.hand("p2")!!.cards)
+        s = s.act(EnterCards("p2", listOf("2C", "2D", "9H")))                      // can still change before it's shown
+        assertEquals("Enter 3 cards", s.rejects(EnterCards("p2", listOf("AS", "KS"))))
+        assertEquals("A♠ is entered twice", s.rejects(EnterCards("p2", listOf("AS", "AS", "KD"))))
+        assertEquals("Unknown card 1X", s.rejects(EnterCards("p2", listOf("1X", "AS", "KD"))))
+        s = s.act(ForceShow)
+        assertTrue(s.round!!.hand("p2")!!.cardsShown)
+        assertEquals("Ravi's cards were shown, so they can't change", s.rejects(EnterCards("p2", listOf("AS", "KS", "QS"))))
+        // A blind player can enter their cards once they're on show.
+        s = s.act(EnterCards("p3", listOf("7S", "7H", "7D")))
+        assertEquals(listOf("7S", "7H", "7D"), s.round!!.hand("p3")!!.cards)
+    }
+
     @Test
     fun playersCanOnlyActForThemselves() {
         val s = table().act(StartRound)
@@ -311,7 +432,7 @@ class GameEngineTest {
         var s = table("Ravi", "Meena", "Kiran")
         assertEquals("The host can't be removed", s.rejects(RemovePlayer("p1")))
         s = s.act(StartRound).act(Pack("p2")).act(Pack("p3")).act(Pack("p4"))
-        assertEquals("Ravi is at -₹5. Settle up first, or let them sit out", s.rejects(RemovePlayer("p2")))
+        assertEquals("Ravi is at -5. Even out their chips first, or let them sit out", s.rejects(RemovePlayer("p2")))
         s = s.act(AdjustChips("p2", 5)).act(AdjustChips("p2", -250)).act(AdjustChips("p2", 250))
         assertEquals(-5, s.player("p2")!!.net)
         val fresh = GameEngine.addPlayer(s, "Guest", hasDevice = false)
@@ -362,8 +483,11 @@ class GameEngineTest {
                     s.players.filter { it.balance < settings.bootAmount }.forEach { s = s.act(AdjustChips(it.id, 100)) }
                     StartRound
                 }
-                round.phase == RoundPhase.SHOWDOWN ->
-                    DeclareWinners(round.showdownIds.shuffled(random).take(1 + random.nextInt(round.showdownIds.size)))
+                round.phase == RoundPhase.SHOWDOWN -> {
+                    // After an all-in only the players in the current pot can win it.
+                    val ids = round.pots.getOrNull(round.potWinners.size)?.eligibleIds ?: round.showdownIds
+                    DeclareWinners(ids.shuffled(random).take(1 + random.nextInt(ids.size)))
+                }
                 round.phase == RoundPhase.SIDE_SHOW_COMPARE ->
                     DeclareWinners(listOf(listOf(round.sideShow!!.requesterId, round.sideShow!!.targetId).random(random)))
                 round.phase == RoundPhase.SIDE_SHOW_REQUESTED ->
@@ -371,9 +495,11 @@ class GameEngineTest {
                 else -> {
                     val id = round.turnId!!
                     assertTrue(round.hand(id)!!.status != HandStatus.PACKED, "turn given to a packed player")
+                    assertTrue(!round.hand(id)!!.allIn, "turn given to an all-in player")
                     val o = Rules.seatOptions(s, id)
                     val choices = buildList {
                         if (o.canSee) add(SeeCards(id))
+                        if (o.canAllIn) repeat(4) { add(AllIn(id)) }
                         if (o.callError == null) repeat(4) { add(Bet(id)) }
                         if (o.raiseError == null) add(Bet(id, raise = true))
                         if (o.showAvailable && o.showError == null) add(Show(id))

@@ -89,14 +89,14 @@ class PokerEngineTest {
     @Test
     fun raisesMustBeAtLeastTheLastRaise() {
         var s = table().act(StartRound)
-        assertEquals("Raise to at least ₹4", s.rejects(RaiseTo("p1", 3)))
+        assertEquals("Raise to at least 4", s.rejects(RaiseTo("p1", 3)))
         s = s.act(RaiseTo("p1", 6))
         assertEquals(4, s.round!!.minRaise)
-        assertEquals("Raise to at least ₹10", s.rejects(RaiseTo("p2", 9)))
+        assertEquals("Raise to at least 10", s.rejects(RaiseTo("p2", 9)))
         s = s.act(RaiseTo("p2", 10))
         assertEquals(10, s.round!!.currentBet)
         assertEquals(90, s.balance("p2"))
-        assertEquals("You need to call ₹8 or fold", s.rejects(Check("p3")))
+        assertEquals("You need to call 8 chips or fold", s.rejects(Check("p3")))
         assertEquals("It's Meena's turn", s.rejects(Call("p1")))
     }
 
@@ -107,7 +107,7 @@ class PokerEngineTest {
         s = s.act(RaiseTo("p1", 100))
         assertTrue(s.round!!.hand("p1")!!.allIn)
         assertEquals(0, s.balance("p1"))
-        assertEquals("Asha is all-in for ₹100", s.log.last().text)
+        assertEquals("Asha is all-in for 100", s.log.last().text)
         val ravi = PokerRules.options(s, "p2")
         assertTrue(ravi.canCall && ravi.callIsAllIn)
         assertEquals(99, ravi.toCall)
@@ -120,7 +120,7 @@ class PokerEngineTest {
         val o = PokerRules.options(s, "p1")
         assertEquals(7, o.maxRaiseTo, "pre-flop pot raise with 1/2 blinds is to 7")
         assertEquals(7, o.potRaiseTo)
-        assertEquals("Pot limit: the most you can make it is ₹7", s.rejects(RaiseTo("p1", 8)))
+        assertEquals("Pot limit: the most you can make it is 7", s.rejects(RaiseTo("p1", 8)))
         s = s.act(RaiseTo("p1", 7))
         // Pot is now 10, Ravi (small blind) owes 6: pot raise is 7 + 10 + 6 = 23.
         assertEquals(23, PokerRules.options(s, "p2").maxRaiseTo)
@@ -143,7 +143,7 @@ class PokerEngineTest {
         assertEquals(listOf("p3"), round.winnerIds)
         assertEquals(101, s.balance("p3"))
         assertEquals(mapOf("p1" to 0, "p2" to -1, "p3" to 1), s.results.single().changes)
-        assertEquals("Meena won ₹3", s.log.last().text)
+        assertEquals("Meena won 3 chips", s.log.last().text)
         assertChipsConserved(s)
     }
 
@@ -158,7 +158,7 @@ class PokerEngineTest {
         val round = s.round!!
         assertEquals(RoundPhase.SHOWDOWN, round.phase)
         assertEquals(listOf(Pot(6, listOf("p1", "p2", "p3"))), round.pots)
-        assertEquals("Showdown · Pot ₹6", describeRound(s, round))
+        assertEquals("Showdown · Pot: 6 chips", describeRound(s, round))
         s = s.act(DeclareWinners(listOf("p2")))
         assertEquals(RoundPhase.FINISHED, s.round!!.phase)
         assertEquals(104, s.balance("p2"))
@@ -177,16 +177,16 @@ class PokerEngineTest {
             listOf(Pot(90, listOf("p1", "p2", "p3")), Pot(60, listOf("p1", "p3")), Pot(40, listOf("p1"))),
             round.pots,
         )
-        assertEquals("Showdown · Main pot ₹90", describeRound(s, round))
+        assertEquals("Showdown · Main pot: 90 chips", describeRound(s, round))
         assertEquals("Ravi can't win the side pot 1", s.act(DeclareWinners(listOf("p2"))).rejects(DeclareWinners(listOf("p2"))))
         s = s.act(DeclareWinners(listOf("p2")))
-        assertEquals("Showdown · Side pot 1 ₹60", describeRound(s, s.round!!))
+        assertEquals("Showdown · Side pot 1: 60 chips", describeRound(s, s.round!!))
         s = s.act(DeclareWinners(listOf("p3")))
         assertEquals(RoundPhase.FINISHED, s.round!!.phase)
         assertEquals(listOf(40, 90, 60), s.players.map { it.balance })
         assertEquals(listOf("p2", "p3"), s.round!!.winnerIds)
         assertEquals(150, s.results.single().pot)
-        assertEquals("Ravi won ₹90, Meena won ₹60", winnerText(s, s.round!!))
+        assertEquals("Ravi won 90 chips, Meena won 60 chips", winnerText(s, s.round!!))
         assertChipsConserved(s)
     }
 
@@ -254,7 +254,7 @@ class PokerEngineTest {
         assertEquals(listOf(0, 1, 2), round.hands.map { it.streetBet })
         assertEquals(listOf(1, 2, 3), round.hands.map { it.invested })
         assertEquals("p1", round.turnId)
-        assertTrue(s.log.any { it.text == "Everyone antes ₹1" })
+        assertTrue(s.log.any { it.text == "Everyone antes 1 chip" })
         assertEquals(2, PokerRules.options(s, "p1").toCall)
         s = s.act(Call("p1")).act(Call("p2")).act(Check("p3"))
         assertEquals(Street.FLOP, s.round!!.street)
@@ -268,7 +268,7 @@ class PokerEngineTest {
         assertEquals(6, s.round!!.pot)
         assertEquals(listOf(100, 99, 95), s.players.map { it.balance })
         assertEquals(2, s.round!!.hand("p3")!!.streetBet)
-        assertTrue(s.log.any { it.text == "Meena posts the big blind ante ₹3" })
+        assertTrue(s.log.any { it.text == "Meena posts the big blind ante 3" })
         assertChipsConserved(s)
     }
 
@@ -300,9 +300,9 @@ class PokerEngineTest {
 
     @Test
     fun anteSettings() {
-        assertEquals("Blinds ₹1/₹2 · ante ₹1 · no limit", noLimit.copy(ante = 1).summary())
+        assertEquals("Blinds 1/2 · ante 1 · no limit", noLimit.copy(ante = 1).summary())
         assertEquals(
-            "Blinds ₹1/₹2 · big blind ante ₹2 each · pot limit",
+            "Blinds 1/2 · big blind ante 2 each · pot limit",
             potLimit.copy(ante = 2, anteStyle = AnteStyle.BIG_BLIND).summary(),
         )
         assertEquals("Ante can't be negative", noLimit.copy(ante = -1).validationError())
@@ -315,7 +315,7 @@ class PokerEngineTest {
         assertNull(noLimit.validationError())
         assertEquals("Big blind can't be smaller than the small blind", noLimit.copy(bigBlind = 0).validationError())
         assertEquals("Big blind can't be more than the starting chips", noLimit.copy(bigBlind = 500).validationError())
-        assertEquals("Blinds ₹1/₹2 · pot limit", potLimit.summary())
+        assertEquals("Blinds 1/2 · pot limit", potLimit.summary())
         assertEquals("pot-limit poker", potLimit.gameName())
     }
 

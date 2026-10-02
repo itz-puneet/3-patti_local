@@ -31,13 +31,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.threepatti.core.GameState
 import com.threepatti.core.Settlement
-import com.threepatti.core.formatMoney
-import com.threepatti.core.formatSignedMoney
+import com.threepatti.core.formatChipCount
+import com.threepatti.core.formatChips
+import com.threepatti.core.formatSignedChips
 
 @Composable
 fun LedgerTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPlayerClick: (String) -> Unit) {
     val transfers = remember(state.players) { Settlement.transfers(state.players) }
-    val currency = state.settings.currency
     val colors = MaterialTheme.colorScheme
     LazyColumn(
         contentPadding = PaddingValues(12.dp),
@@ -53,7 +53,7 @@ fun LedgerTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPl
                     val header = MaterialTheme.typography.labelMedium
                     LedgerRow(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
                         Cell("Player", header, colors.onSurfaceVariant, name = true)
-                        Cell("Bought", header, colors.onSurfaceVariant)
+                        Cell("Took", header, colors.onSurfaceVariant)
                         Cell("Chips", header, colors.onSurfaceVariant)
                         Cell("Net", header, colors.onSurfaceVariant)
                     }
@@ -63,10 +63,10 @@ fun LedgerTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPl
                         LedgerRow(rowModifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                             val body = MaterialTheme.typography.bodyMedium
                             Cell(player.name + if (player.id == myId) " (you)" else "", body, colors.onSurface, name = true)
-                            Cell(formatMoney(player.buyIn, currency), body, colors.onSurfaceVariant)
-                            Cell(formatMoney(player.balance, currency), body, colors.onSurface)
+                            Cell(formatChips(player.buyIn), body, colors.onSurfaceVariant)
+                            Cell(formatChips(player.balance), body, colors.onSurface)
                             Cell(
-                                formatSignedMoney(player.net, currency),
+                                formatSignedChips(player.net),
                                 body.copy(fontWeight = FontWeight.Bold),
                                 colors.forNet(player.net),
                             )
@@ -76,8 +76,8 @@ fun LedgerTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPl
                     LedgerRow(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                         val total = MaterialTheme.typography.labelLarge
                         Cell("Total", total, colors.onSurface, name = true)
-                        Cell(formatMoney(state.players.sumOf { it.buyIn }, currency), total, colors.onSurfaceVariant)
-                        Cell(formatMoney(state.players.sumOf { it.balance }, currency), total, colors.onSurface)
+                        Cell(formatChips(state.players.sumOf { it.buyIn }), total, colors.onSurfaceVariant)
+                        Cell(formatChips(state.players.sumOf { it.balance }), total, colors.onSurface)
                         Cell("", total, colors.onSurface)
                     }
                 }
@@ -86,12 +86,12 @@ fun LedgerTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPl
         val round = state.round
         if (round != null && round.isActive) {
             item(key = "pot-note") {
-                Hint("${state.money(round.pot)} is in the pot of the running round. Settle up after it ends.")
+                Hint("${state.chipCount(round.pot)} are in the pot of the running round. Even out after it ends.")
             }
         }
-        item(key = "settle-title") { SectionTitle("Settle up") }
+        item(key = "settle-title") { SectionTitle("Even out") }
         if (transfers.isEmpty()) {
-            item(key = "even") { Hint("Everyone is even. Nobody owes anything.") }
+            item(key = "even") { Hint("Everyone is even.") }
         }
         items(transfers, key = { "${it.fromId}-${it.toId}" }) { transfer ->
             Card(
@@ -106,7 +106,7 @@ fun LedgerTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPl
                     Text(state.nameOf(transfer.fromId), fontWeight = FontWeight.SemiBold, maxLines = 1)
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = "pays",
+                        contentDescription = "gives",
                         modifier = Modifier.size(18.dp),
                         tint = colors.onSurfaceVariant,
                     )
@@ -118,7 +118,7 @@ fun LedgerTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPl
                         modifier = Modifier.weight(1f),
                     )
                     Text(
-                        formatMoney(transfer.amount, currency),
+                        formatChipCount(transfer.amount),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                     )
@@ -127,8 +127,8 @@ fun LedgerTab(state: GameState, myId: String, canOpen: (String) -> Boolean, onPl
         }
         item(key = "explain") {
             Hint(
-                "Bought = starting chips plus top ups, minus cash outs. Net = chips now minus bought. " +
-                    "At the end of the game, pay as listed under Settle up and everyone is square.",
+                "Took = starting chips plus extra chips taken, minus chips given back. Net = chips now minus took. " +
+                    "To finish, hand over chips as listed under Even out and everyone ends even.",
                 modifier = Modifier.padding(top = 8.dp),
             )
         }

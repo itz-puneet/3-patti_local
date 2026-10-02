@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.threepatti.core.GameState
 import com.threepatti.core.LogKind
 import com.threepatti.core.RoundResult
-import com.threepatti.core.formatSignedMoney
+import com.threepatti.core.formatSignedChips
 
 @Composable
 fun HistoryTab(state: GameState) {
@@ -82,7 +82,6 @@ fun HistoryTab(state: GameState) {
 @Composable
 private fun RoundCard(state: GameState, result: RoundResult, word: String) {
     val colors = MaterialTheme.colorScheme
-    val currency = state.settings.currency
     val strike = if (result.undone) TextDecoration.LineThrough else null
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow)) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -96,7 +95,7 @@ private fun RoundCard(state: GameState, result: RoundResult, word: String) {
                 if (result.undone) {
                     StatusPill("Undone by host", colors.errorContainer, colors.onErrorContainer, Modifier.padding(end = 8.dp))
                 }
-                Text("Pot ${state.money(result.pot)}", style = MaterialTheme.typography.labelLarge, textDecoration = strike)
+                Text("Pot ${state.chips(result.pot)}", style = MaterialTheme.typography.labelLarge, textDecoration = strike)
             }
             Text(
                 (if (result.winnerNames.size == 1) "Winner: " else "Split between: ") + result.winnerNames.joinToString(", "),
@@ -111,7 +110,7 @@ private fun RoundCard(state: GameState, result: RoundResult, word: String) {
                     append(state.nameOf(id) + " ")
                     val color = if (result.undone) colors.outline else colors.forNet(change)
                     withStyle(SpanStyle(color = color, fontWeight = FontWeight.SemiBold)) {
-                        append(formatSignedMoney(change, currency))
+                        append(formatSignedChips(change))
                     }
                 }
             }

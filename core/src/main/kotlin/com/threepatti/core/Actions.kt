@@ -37,6 +37,19 @@ sealed class GameAction {
     @SerialName("side_show_answer")
     data class AnswerSideShow(override val playerId: String, val accept: Boolean) : GameAction(), SeatAction
 
+    /** Put in every chip left, when they aren't enough for the blind or chaal. */
+    @Serializable
+    @SerialName("all_in")
+    data class AllIn(override val playerId: String) : GameAction(), SeatAction
+
+    /**
+     * A player's own 3 cards, such as "AS" or "10H", so the app can show them in a side show or show.
+     * Only that player sees them until then.
+     */
+    @Serializable
+    @SerialName("enter_cards")
+    data class EnterCards(override val playerId: String, val cards: List<String>) : GameAction(), SeatAction
+
     // Poker moves. Folding uses [Pack].
 
     @Serializable
@@ -86,7 +99,7 @@ sealed class GameAction {
     @SerialName("rename")
     data class RenamePlayer(override val playerId: String, val name: String) : GameAction(), SeatAction
 
-    /** Positive amount: player buys more chips. Negative amount: player cashes chips out. */
+    /** Positive amount: the player takes more chips. Negative amount: the player gives chips back. */
     @Serializable
     @SerialName("adjust_chips")
     data class AdjustChips(val playerId: String, val amount: Int) : GameAction()

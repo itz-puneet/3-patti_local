@@ -1,5 +1,7 @@
 package com.threepatti.core
 
+import kotlinx.serialization.Serializable
+
 // 3 Patti hand rankings, used to decide a show or side show when players aren't sure who won.
 
 enum class Suit(val symbol: String, val letter: Char, val red: Boolean) {
@@ -66,6 +68,7 @@ enum class HandType(val label: String) {
 }
 
 /** 3 Patti variants that change who wins a show. */
+@Serializable
 enum class Variant(val label: String, val description: String) {
     CLASSIC("Classic", "Normal 3 Patti rankings"),
     MUFLIS("Muflis", "Rankings are reversed: the lowest hand wins"),

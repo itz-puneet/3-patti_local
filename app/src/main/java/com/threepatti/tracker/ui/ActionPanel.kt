@@ -55,6 +55,8 @@ fun ActionPanel(
     isHost: Boolean,
     onAction: (GameAction) -> Unit,
     onOpen: (GameDialog) -> Unit,
+    /** Open the card picker when this player sees their cards. */
+    askForCards: Boolean = false,
 ) {
     val round = state.round
     val waitingOnId = when (round?.phase) {
@@ -81,15 +83,18 @@ fun ActionPanel(
                 state.settings.isPoker && round.phase == RoundPhase.BETTING -> PokerBetting(
                     state, round, seatId, myId, takeOverOffer, takeOver, { takeOver = !takeOver }, onAction, onOpen,
                 )
-                state.settings.isPoker -> PokerShowdown(state, round, isHost, onOpen)
+                state.settings.isPoker -> PokerShowdown(state, round, myId, isHost, onAction, onOpen)
                 round.phase == RoundPhase.BETTING -> Betting(
-                    state, round, seatId, myId, takeOverOffer, takeOver, { takeOver = !takeOver }, onAction, onOpen,
+                    state, round, seatId, myId, isHost, askForCards, takeOverOffer, takeOver, { takeOver = !takeOver },
+                    onAction, onOpen,
                 )
                 round.phase == RoundPhase.SIDE_SHOW_REQUESTED -> SideShowRequested(
                     state, round, seatId, myId, takeOverOffer, takeOver, { takeOver = !takeOver }, onAction,
                 )
-                round.phase == RoundPhase.SIDE_SHOW_COMPARE -> SideShowCompare(state, round, isHost, onOpen)
-                else -> Showdown(state, round, isHost, onOpen)
+                round.phase == RoundPhase.SIDE_SHOW_COMPARE -> SideShowCompare(state, round, myId, isHost, onAction, onOpen)
+                // After an all-in the show is decided pot by pot, like a poker showdown.
+                round.pots.isNotEmpty() -> PokerShowdown(state, round, myId, isHost, onAction, onOpen)
+                else -> Showdown(state, round, myId, isHost, onAction, onOpen)
             }
         }
     }
@@ -122,11 +127,11 @@ private fun BetweenRounds(state: GameState, isHost: Boolean, onAction: (GameActi
         Hint(
             when {
                 ready < 2 && settings.isPoker -> "Need at least 2 players with chips"
-                ready < 2 -> "Need at least 2 players with ${state.money(settings.bootAmount)} or more"
+                ready < 2 -> "Need at least 2 players with ${state.chipCount(settings.bootAmount)} or more"
                 settings.isPoker ->
-                    "Shuffle and deal, then start. Blinds ${state.money(settings.smallBlind)}/${state.money(settings.bigBlind)} " +
+                    "Shuffle and deal, then start. Blinds ${state.chips(settings.smallBlind)}/${state.chips(settings.bigBlind)} " +
                         "are posted automatically"
-                else -> "Deal the cards, then start. Boot of ${state.money(settings.bootAmount)} from $ready players"
+                else -> "Deal the cards, then start. Boot of ${state.chipCount(settings.bootAmount)} from $ready players"
             },
             center = true,
             modifier = Modifier.fillMaxWidth(),
@@ -147,6 +152,8 @@ private fun Betting(
     round: Round,
     seatId: String,
     myId: String,
+    isHost: Boolean,
+    askForCards: Boolean,
     takeOverOffer: Player?,
     takingOver: Boolean,
     onToggleTakeOver: () -> Unit,
@@ -161,31 +168,56 @@ private fun Betting(
         options.isTurn -> "Your turn"
         else -> "Waiting for ${state.nameOf(round.turnId)}"
     }
-    Header(headline, seatSummary(state, options), takeOverOffer, takingOver, onToggleTakeOver)
+    Header(headline, seatSummary(state, options), takeOverOffer, takingOver, onToggleTakeOver) {
+        SeatCards(state, round, seatId, myId, isHost, onOpen)
+    }
+    // Seeing your own cards offers to enter them, so the app can check a side show or show later.
+    val seeCards = {
+        onAction(GameAction.SeeCards(seatId))
+        if (forMe && askForCards) onOpen(GameDialog.EnterCards(seatId, round.number, afterSeeing = true))
+    }
 
     when {
         !options.inRound -> Hint(if (forMe) "You are not in this round. You'll be dealt in next round." else "$seatName is not in this round.")
         options.isPacked -> Hint(if (forMe) "You packed. Wait for the next round." else "$seatName packed.")
+        options.isAllIn -> {
+            Hint(if (forMe) "You are all in. Wait for the show." else "$seatName is all in.")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (options.canSee) SmallButton("See cards", onClick = seeCards)
+                SmallButton("Pack", danger = true) { onOpen(GameDialog.ConfirmPack(seatId)) }
+            }
+        }
         options.isTurn -> {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BigButton(
-                    label = options.callLabel,
-                    amount = state.money(options.callAmount),
-                    enabled = options.callError == null,
-                    onClick = { onAction(GameAction.Bet(seatId)) },
-                )
-                BigButton(
-                    label = "Raise",
-                    amount = state.money(options.raiseAmount),
-                    enabled = options.raiseError == null,
-                    secondary = true,
-                    onClick = { onAction(GameAction.Bet(seatId, raise = true)) },
-                )
+                if (options.canAllIn) {
+                    // Not enough chips for the blind or chaal: all in is the way to stay in.
+                    BigButton(
+                        label = "All in",
+                        amount = state.chips(options.allInAmount),
+                        enabled = true,
+                        secondary = true,
+                        onClick = { onOpen(GameDialog.ConfirmAllIn(seatId)) },
+                    )
+                } else {
+                    BigButton(
+                        label = options.callLabel,
+                        amount = state.chips(options.callAmount),
+                        enabled = options.callError == null,
+                        onClick = { onAction(GameAction.Bet(seatId)) },
+                    )
+                    BigButton(
+                        label = "Raise",
+                        amount = state.chips(options.raiseAmount),
+                        enabled = options.raiseError == null,
+                        secondary = true,
+                        onClick = { onAction(GameAction.Bet(seatId, raise = true)) },
+                    )
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (options.canSee) SmallButton("See cards") { onAction(GameAction.SeeCards(seatId)) }
+                if (options.canSee) SmallButton("See cards", onClick = seeCards)
                 if (options.showAvailable) {
-                    SmallButton("Show ${state.money(options.showAmount)}", enabled = options.showError == null) {
+                    SmallButton("Show ${state.chips(options.showAmount)}", enabled = options.showError == null) {
                         onAction(GameAction.Show(seatId))
                     }
                 }
@@ -196,10 +228,14 @@ private fun Betting(
                 }
                 SmallButton("Pack", danger = true) { onOpen(GameDialog.ConfirmPack(seatId)) }
             }
-            val note = options.callError
+            val note = options.takeIf { it.canAllIn }?.let {
+                "Not enough chips for the ${it.callLabel.lowercase()} of ${state.chipCount(it.callAmount)}. " +
+                    "Go all in to stay in, or pack."
+            }
+                ?: options.callError
                 ?: options.raiseError?.takeIf { !it.contains("needs") }
                 ?: if (options.sideShowAvailable) {
-                    options.sideShowError ?: "Side show: pay ${state.money(options.sideShowAmount)} and compare cards " +
+                    options.sideShowError ?: "Side show: pay ${state.chipCount(options.sideShowAmount)} and compare cards " +
                         "with ${state.nameOf(options.sideShowTargetId)}"
                 } else {
                     null
@@ -207,7 +243,7 @@ private fun Betting(
             if (note != null) Hint(note)
         }
         else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (options.canSee) SmallButton("See cards") { onAction(GameAction.SeeCards(seatId)) }
+            if (options.canSee) SmallButton("See cards", onClick = seeCards)
             SmallButton("Pack", danger = true) { onOpen(GameDialog.ConfirmPack(seatId)) }
         }
     }
@@ -251,53 +287,101 @@ private fun SideShowRequested(
 }
 
 @Composable
-private fun SideShowCompare(state: GameState, round: Round, isHost: Boolean, onOpen: (GameDialog) -> Unit) {
+private fun SideShowCompare(
+    state: GameState,
+    round: Round,
+    myId: String,
+    isHost: Boolean,
+    onAction: (GameAction) -> Unit,
+    onOpen: (GameDialog) -> Unit,
+) {
     val sideShow = round.sideShow ?: return
     val pair = listOf(sideShow.requesterId, sideShow.targetId)
     Text(
-        "${state.nameOf(pair[0])} and ${state.nameOf(pair[1])} are comparing cards",
+        if (myId in pair) {
+            "Your side show with ${state.nameOf(pair.first { it != myId })}"
+        } else {
+            "${state.nameOf(pair[0])} and ${state.nameOf(pair[1])} are comparing cards"
+        },
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
     )
+    EnterCardsPrompt(state, round, myId, isHost, onOpen)
+    SuggestionBox(state, round, myId)
+    val suggested = round.suggestedWinnerIds.singleOrNull()
     if (isHost) {
-        Hint("Who has the better hand? The other one packs.")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            pair.forEach { id ->
-                BigButton(
-                    label = state.nameOf(id),
-                    amount = null,
-                    enabled = true,
-                    onClick = { onOpen(GameDialog.ConfirmWinners(listOf(id))) },
-                )
+        ConfirmOrPick(
+            confirmText = suggested?.let { "Confirm: ${state.nameOf(it)} wins the side show" },
+            awaited = round.awaitingCardsFrom.isNotEmpty(),
+            resetKey = suggested,
+            onConfirm = { suggested?.let { onAction(GameAction.DeclareWinners(listOf(it))) } },
+        ) {
+            Hint("Who has the better hand? The other one packs.")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                pair.forEach { id ->
+                    BigButton(
+                        label = state.nameOf(id),
+                        amount = null,
+                        enabled = true,
+                        onClick = { onOpen(GameDialog.ConfirmWinners(listOf(id))) },
+                    )
+                }
             }
+            DecideFromCards(onOpen)
         }
-    } else {
+    } else if (suggested != null) {
+        Hint("Waiting for the host to confirm")
+    } else if (round.awaitingCardsFrom.isEmpty()) {
         Hint("Waiting for the host to enter who won the side show")
+        DecideFromCards(onOpen)
     }
-    DecideFromCards(onOpen)
 }
 
 /** Opens the screen that works out the winner from everyone's cards. */
 @Composable
-private fun DecideFromCards(onOpen: (GameDialog) -> Unit) {
+internal fun DecideFromCards(onOpen: (GameDialog) -> Unit) {
     OutlinedButton(onClick = { onOpen(GameDialog.DecideWinner) }, modifier = Modifier.fillMaxWidth()) {
         Text("Not sure? Decide from the cards")
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Showdown(state: GameState, round: Round, isHost: Boolean, onOpen: (GameDialog) -> Unit) {
+private fun Showdown(
+    state: GameState,
+    round: Round,
+    myId: String,
+    isHost: Boolean,
+    onAction: (GameAction) -> Unit,
+    onOpen: (GameDialog) -> Unit,
+) {
     Text(
         "Show: " + round.showdownIds.joinToString(" vs ") { state.nameOf(it) },
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.SemiBold,
     )
+    EnterCardsPrompt(state, round, myId, isHost, onOpen)
+    SuggestionBox(state, round, myId)
+    val suggested = round.suggestedWinnerIds
     if (!isHost) {
-        Hint("Cards are on the table. Waiting for the host to enter the winner.")
-        DecideFromCards(onOpen)
+        if (suggested.isNotEmpty()) {
+            Hint("Waiting for the host to confirm the winner.")
+        } else if (round.awaitingCardsFrom.isEmpty()) {
+            Hint("Cards are on the table. Waiting for the host to enter the winner.")
+            DecideFromCards(onOpen)
+        }
         return
     }
+    ConfirmOrPick(
+        confirmText = suggested.takeIf { it.isNotEmpty() }?.let { giveText(state, round.pot, it) },
+        awaited = round.awaitingCardsFrom.isNotEmpty(),
+        resetKey = suggested,
+        onConfirm = { onAction(GameAction.DeclareWinners(suggested)) },
+    ) { PickShowWinners(state, round, onOpen) }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PickShowWinners(state: GameState, round: Round, onOpen: (GameDialog) -> Unit) {
     var selected by remember(round.number, round.showdownIds) { mutableStateOf(setOf<String>()) }
     Hint("Tap the winner. Tap more than one only if hands are exactly equal to split the pot.")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -325,8 +409,8 @@ private fun Showdown(state: GameState, round: Round, isHost: Boolean, onOpen: (G
         Text(
             when (winners.size) {
                 0 -> "Pick the winner"
-                1 -> "Give ${state.money(round.pot)} to ${state.nameOf(winners[0])}"
-                else -> "Split ${state.money(round.pot)} between ${winners.size}"
+                1 -> "Give ${state.chipCount(round.pot)} to ${state.nameOf(winners[0])}"
+                else -> "Split ${state.chipCount(round.pot)} between ${winners.size}"
             },
         )
     }
@@ -339,6 +423,7 @@ internal fun Header(
     takeOverOffer: Player?,
     takingOver: Boolean,
     onToggleTakeOver: () -> Unit,
+    trailing: @Composable () -> Unit = {},
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -351,6 +436,7 @@ internal fun Header(
             )
             if (detail != null) Hint(detail)
         }
+        trailing()
         if (takeOverOffer != null) {
             TextButton(onClick = onToggleTakeOver) {
                 Text(if (takingOver) "Back to me" else "Play for ${takeOverOffer.name}", maxLines = 1)
@@ -367,7 +453,7 @@ private fun seatSummary(state: GameState, options: SeatOptions): String? {
         options.isBlind -> "blind"
         else -> "seen"
     }
-    return "${state.money(player.balance)} left · $status"
+    return "${state.chipCount(player.balance)} left · $status"
 }
 
 @Composable
