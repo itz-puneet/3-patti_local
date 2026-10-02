@@ -58,6 +58,8 @@ sealed interface GameDialog {
     data object CloseTable : GameDialog
     data object LeaveTable : GameDialog
     data object ConfirmUndo : GameDialog
+    data object DecideWinner : GameDialog
+    data object HandChecker : GameDialog
     data class PlayerMenu(val playerId: String) : GameDialog
     data class Chips(val playerId: String) : GameDialog
     data class Rename(val playerId: String) : GameDialog
@@ -257,9 +259,11 @@ private fun GameTopBar(
                     item("Table settings", !state.isRoundActive, GameDialog.Settings)
                     item(if (state.settings.isPoker) "Go to showdown" else "Call show for everyone", betting, GameDialog.ForceShow)
                     item("Cancel ${state.roundWord} (misdeal)", state.isRoundActive, GameDialog.CancelRound)
+                    if (!state.settings.isPoker) item("Which hand wins?", true, GameDialog.HandChecker)
                     item("Close table", true, GameDialog.CloseTable)
                 } else {
                     item("Table rules", true, GameDialog.Rules)
+                    if (!state.settings.isPoker) item("Which hand wins?", true, GameDialog.HandChecker)
                     item("Leave table", true, GameDialog.LeaveTable)
                 }
             }

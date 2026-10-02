@@ -274,6 +274,15 @@ private fun SideShowCompare(state: GameState, round: Round, isHost: Boolean, onO
     } else {
         Hint("Waiting for the host to enter who won the side show")
     }
+    DecideFromCards(onOpen)
+}
+
+/** Opens the screen that works out the winner from everyone's cards. */
+@Composable
+private fun DecideFromCards(onOpen: (GameDialog) -> Unit) {
+    OutlinedButton(onClick = { onOpen(GameDialog.DecideWinner) }, modifier = Modifier.fillMaxWidth()) {
+        Text("Not sure? Decide from the cards")
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -286,6 +295,7 @@ private fun Showdown(state: GameState, round: Round, isHost: Boolean, onOpen: (G
     )
     if (!isHost) {
         Hint("Cards are on the table. Waiting for the host to enter the winner.")
+        DecideFromCards(onOpen)
         return
     }
     var selected by remember(round.number, round.showdownIds) { mutableStateOf(setOf<String>()) }
@@ -306,6 +316,7 @@ private fun Showdown(state: GameState, round: Round, isHost: Boolean, onOpen: (G
         }
     }
     val winners = round.showdownIds.filter { it in selected }
+    DecideFromCards(onOpen)
     Button(
         onClick = { onOpen(GameDialog.ConfirmWinners(winners)) },
         enabled = winners.isNotEmpty(),

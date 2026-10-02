@@ -125,6 +125,48 @@ fun GameDialogs(
                 onDismiss = onDismiss,
             )
         }
+        GameDialog.DecideWinner -> {
+            val round = state.round
+            val sideShow = round?.sideShow?.takeIf { round.phase == RoundPhase.SIDE_SHOW_COMPARE }
+            val ids = when {
+                sideShow != null -> listOf(sideShow.requesterId, sideShow.targetId)
+                round?.phase == RoundPhase.SHOWDOWN && !poker -> round.showdownIds
+                else -> null
+            }
+            if (round == null || ids == null) {
+                // The show was settled in the meantime.
+                LaunchedEffect(Unit) { onDismiss() }
+            } else {
+                DecideWinnerDialog(
+                    title = if (sideShow != null) "Decide the side show" else "Decide the show",
+                    seats = ids.map { HandSeat(it, state.nameOf(it)) },
+                    sideShowAsker = sideShow?.requesterId,
+                    canAddHands = false,
+                    declareText = { winners ->
+                        when {
+                            sideShow != null -> "${state.nameOf(winners[0])} wins the side show"
+                            winners.size == 1 -> "Give ${state.money(round.pot)} to ${state.nameOf(winners[0])}"
+                            else -> "Split ${state.money(round.pot)} between ${state.namesOf(winners)}"
+                        }
+                    },
+                    onDeclare = if (session.isHost) {
+                        { winners -> submit(GameAction.DeclareWinners(winners)) }
+                    } else {
+                        null
+                    },
+                    onDismiss = onDismiss,
+                )
+            }
+        }
+        GameDialog.HandChecker -> DecideWinnerDialog(
+            title = "Which hand wins?",
+            seats = listOf(HandSeat("hand1", "Hand 1"), HandSeat("hand2", "Hand 2")),
+            sideShowAsker = null,
+            canAddHands = true,
+            declareText = { "" },
+            onDeclare = null,
+            onDismiss = onDismiss,
+        )
         GameDialog.LeaveTable -> ConfirmDialog(
             title = "Leave the table?",
             text = "Your seat and chips stay with the host. Join again from this phone to get them back.",

@@ -81,7 +81,7 @@ fun TableView(
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val width = maxWidth
         val ideal = width * when {
-            seats.size <= 4 -> 1.05f
+            seats.size <= 4 -> 1.15f
             seats.size <= 6 -> 1.2f
             seats.size <= 8 -> 1.35f
             seats.size <= 10 -> 1.55f

@@ -26,24 +26,48 @@ jobs:
         run: ./gradlew :core:test --stacktrace
 
       - name: Build APK
-        run: ./gradlew :app:assembleRelease --stacktrace
+        run: ./gradlew :app:assembleGithubRelease --stacktrace
 
       - name: Collect APK
-        run: cp app/build/outputs/apk/release/app-release.apk 3patti-chips-handler.apk
+        run: cp app/build/outputs/apk/github/release/app-github-release.apk 3patti-chips-handler.apk
+
+      # The Play Store bundle is signed with the private upload key from the repository secrets
+      # (see store/PLAY_STORE.md). Without them this step is skipped.
+      - name: Build Play Store bundle
+        env:
+          PLAY_UPLOAD_KEYSTORE_BASE64: ${{ secrets.PLAY_UPLOAD_KEYSTORE_BASE64 }}
+          PLAY_UPLOAD_PASSWORD: ${{ secrets.PLAY_UPLOAD_PASSWORD }}
+        run: |
+          if [ -z "$PLAY_UPLOAD_KEYSTORE_BASE64" ] || [ -z "$PLAY_UPLOAD_PASSWORD" ]; then
+            echo "::notice::No Play upload key in the repository secrets, so no Play Store bundle this time."
+            exit 0
+          fi
+          echo "$PLAY_UPLOAD_KEYSTORE_BASE64" | base64 --decode --ignore-garbage > "$RUNNER_TEMP/upload.jks"
+          PLAY_UPLOAD_KEYSTORE="$RUNNER_TEMP/upload.jks" ./gradlew :app:bundlePlayRelease --stacktrace
+          rm "$RUNNER_TEMP/upload.jks"
+          cp app/build/outputs/bundle/playRelease/app-play-release.aab 3patti-chips-handler-play.aab
 
       - uses: actions/upload-artifact@v4
         with:
-          name: 3patti-chips-handler-apk
-          path: 3patti-chips-handler.apk
+          name: 3patti-chips-handler
+          path: |
+            3patti-chips-handler.apk
+            3patti-chips-handler-play.aab
 
       - name: Publish as latest release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          files="3patti-chips-handler.apk"
+          notes="Build ${GITHUB_RUN_NUMBER} from commit ${GITHUB_SHA::7}. Download 3patti-chips-handler.apk on every phone and install it."
+          if [ -f 3patti-chips-handler-play.aab ]; then
+            files="$files 3patti-chips-handler-play.aab"
+            notes="$notes 3patti-chips-handler-play.aab is for uploading to Google Play, not for installing on a phone."
+          fi
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest 3patti-chips-handler.apk \
+          gh release create latest $files \
             --title "3 Patti Chips Handler (latest build)" \
-            --notes "Build ${GITHUB_RUN_NUMBER} from commit ${GITHUB_SHA::7}. Download 3patti-chips-handler.apk on every phone and install it." \
+            --notes "$notes" \
             --target "$GITHUB_SHA" \
             --latest

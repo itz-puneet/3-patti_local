@@ -164,6 +164,29 @@ h2 { font-size: 17px; margin: 8px 0 0; }
 .log { font-size: 13px; color: var(--muted); padding: 2px 0; }
 .log.neg { color: var(--error); }
 
+/* Decide winner */
+.dialog.wide { max-width: 520px; max-height: calc(100dvh - 32px); overflow-y: auto; gap: 10px; padding: 18px; }
+.hand { display: flex; align-items: center; gap: 8px; background: var(--card); border-radius: 12px; padding: 8px 10px; }
+.hand.won { background: var(--primary-c); color: var(--on-primary-c); box-shadow: inset 0 0 0 2px var(--primary); }
+.hand .hl { flex: 1; min-width: 0; }
+.hand .hn { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.hand .del { background: transparent; color: var(--muted); font-size: 18px; padding: 4px; }
+.slots { display: flex; gap: 5px; }
+.slot { width: 38px; height: 52px; padding: 0; border-radius: 6px; background: #fff; color: #1B1B1B; border: 1px solid var(--outline);
+  font-weight: 700; line-height: 1.1; }
+.slot.empty { background: var(--variant); color: var(--muted); }
+.slot.red, .key.red { color: #C62828; }
+.slot.sel { box-shadow: 0 0 0 3px var(--secondary); }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; }
+.key { min-width: 38px; height: 42px; border-radius: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--outline); font-weight: 700; }
+.key.suit { min-width: 52px; font-size: 22px; }
+.key.on { background: var(--secondary-c); border: 2px solid var(--secondary); }
+.key.plain { border: 0; background: transparent; color: var(--primary); font-weight: 600; }
+.verdict { border-radius: 12px; padding: 12px; background: var(--variant); }
+.verdict.done { background: var(--primary); color: var(--on-primary); }
+.verdict.err { background: var(--error-c); color: var(--on-error-c); }
+.verdict .big { font-size: 17px; font-weight: 700; }
+
 /* Dialog and toast */
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 10; }
 .dialog { background: var(--bg); border-radius: 24px; padding: 22px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; }
@@ -431,7 +454,7 @@ h2 { font-size: 17px; margin: 8px 0 0; }
     var seats = s.players.slice(mine).concat(s.players.slice(0, mine));
     var compact = n > 8, seatW = compact ? 80 : 92, seatH = compact ? 106 : 114;
     var width = Math.min(document.documentElement.clientWidth, 560) - 24;
-    var ideal = width * (n <= 4 ? 1.05 : n <= 6 ? 1.2 : n <= 8 ? 1.35 : n <= 10 ? 1.55 : 1.75);
+    var ideal = width * (n <= 4 ? 1.15 : n <= 6 ? 1.2 : n <= 8 ? 1.35 : n <= 10 ? 1.55 : 1.75);
     var least = Math.min(ideal, n <= 4 ? 330 : n <= 6 ? 380 : n <= 8 ? 420 : n <= 10 ? 500 : 580);
     // Shrink to fit above the buttons while the seats still have room.
     var height = Math.round(Math.max(least, Math.min(ideal, window.innerHeight - 340)));
@@ -629,12 +652,103 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       }
       return '<div class="head">Waiting for ' + esc(nameOf(s, ss.targetId)) + " to answer " + esc(nameOf(s, ss.requesterId)) + "'s side show</div>";
     }
+    var decide = btn("Not sure? Decide from the cards", "decide", "line slim");
     if (r.phase === "SIDE_SHOW_COMPARE" && ss) {
       return '<div class="head">' + esc(nameOf(s, ss.requesterId)) + " and " + esc(nameOf(s, ss.targetId)) + " are comparing cards</div>" +
-        '<div class="small muted">Waiting for the host to enter who won the side show</div>';
+        '<div class="small muted">Waiting for the host to enter who won the side show</div>' + decide;
     }
     return '<div class="head">Show: ' + esc(r.showdownIds.map(function (id) { return nameOf(s, id); }).join(" vs ")) + "</div>" +
-      '<div class="small muted">Cards are on the table. Waiting for the host to enter the winner.</div>';
+      '<div class="small muted">Cards are on the table. Waiting for the host to enter the winner.</div>' + decide;
+  }
+
+  // Decide winner: players enter everyone's 3 cards and the host's phone ranks the hands.
+
+  var SUITS = [["S", "♠"], ["H", "♥"], ["D", "♦"], ["C", "♣"]];
+  function rankText(r) { return { 14: "A", 13: "K", 12: "Q", 11: "J" }[r] || String(r); }
+  function cardCode(c) { return rankText(c.r) + c.s; }
+  function isRed(s) { return s === "H" || s === "D"; }
+
+  function openDecide(title, labels, asker, canAdd) {
+    openDialog({
+      kind: "decide", title: title, labels: labels, asker: asker, canAdd: canAdd, slot: [0, 0], rank: null, suit: null,
+      cards: labels.map(function () { return [null, null, null]; }), result: null, asked: 0
+    });
+  }
+
+  // Cards on the table, except the one in the selected slot, which can be swapped.
+  function usedCards(d) {
+    var used = {};
+    d.cards.forEach(function (hand, i) {
+      hand.forEach(function (c, j) { if (c && !(i === d.slot[0] && j === d.slot[1])) used[cardCode(c)] = true; });
+    });
+    return used;
+  }
+
+  function firstEmpty(d) {
+    for (var i = 0; i < d.cards.length; i++) {
+      var j = d.cards[i].indexOf(null);
+      if (j >= 0) return [i, j];
+    }
+    return null;
+  }
+
+  function placeCard(d, card) {
+    d.cards[d.slot[0]][d.slot[1]] = card;
+    d.rank = null; d.suit = null;
+    d.slot = firstEmpty(d) || d.slot;
+    askVerdict(d);
+  }
+
+  function askVerdict(d) {
+    var asked = ++d.asked;
+    var body = { hands: d.cards.map(function (h) { return h.filter(Boolean).map(cardCode); }), sideShowAsker: d.asker };
+    fetch("/compare", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (res) { if (dialog === d && asked === d.asked) { d.result = res; renderDialog(); } })
+      .catch(function () { showToast("Couldn't reach the host"); });
+    renderDialog();
+  }
+
+  function decideBody(d) {
+    var res = d.result || {}, names = res.names || [], winners = res.winners || [], used = usedCards(d);
+    var html = "<h3>" + esc(d.title) + '</h3><div class="small muted">Tap a card, then pick its rank and suit. ' +
+      "The app ranks the hands by 3 Patti rules.</div>";
+    d.cards.forEach(function (hand, i) {
+      var won = winners.indexOf(i) >= 0, missing = hand.filter(function (c) { return !c; }).length;
+      html += '<div class="hand' + (won ? " won" : "") + '"><div class="hl"><div class="hn">' + esc(d.labels[i]) +
+        (won ? ' <span class="pill pri">Wins</span>' : "") + '</div><div class="small">' +
+        (missing ? '<span class="muted">' + missing + " to enter</span>" : '<b>' + esc(names[i] || "") + "</b>") + '</div></div><div class="slots">';
+      hand.forEach(function (c, j) {
+        var sel = d.slot[0] === i && d.slot[1] === j;
+        html += '<button class="slot' + (c ? (isRed(c.s) ? " red" : "") : " empty") + (sel ? " sel" : "") +
+          '" data-act="slot" data-i="' + i + '" data-j="' + j + '">' +
+          (c ? rankText(c.r) + "<br>" + SUITS.filter(function (x) { return x[0] === c.s; })[0][1] : "?") + "</button>";
+      });
+      html += "</div>" + (d.canAdd && d.cards.length > 2 ? '<button class="del" data-act="delhand" data-i="' + i + '" aria-label="Remove">✕</button>' : "") + "</div>";
+    });
+    if (d.canAdd && d.cards.length < 6) html += '<button class="key plain" data-act="addhand">Add a hand</button>';
+    var complete = d.cards.every(function (h) { return h.every(Boolean); });
+    if (res.ok === false && complete) html += '<div class="verdict err bold">' + esc(res.error) + "</div>";
+    else if (complete && winners.length) {
+      var who = winners.map(function (i) { return d.labels[i]; });
+      html += '<div class="verdict done"><div class="big">' + esc(who.length === 1 ? who[0] + " wins" : who.join(" and ") + " tie") +
+        "</div><div>" + esc(names[winners[0]]) + "</div>" + (res.note ? '<div class="small">' + esc(res.note) + "</div>" : "") + "</div>";
+    } else html += '<div class="verdict muted">Enter every card to see who wins.</div>';
+    html += '<div class="keys">';
+    for (var r = 14; r >= 2; r--) {
+      var free = SUITS.some(function (x) { return !used[rankText(r) + x[0]]; }) && (!d.suit || !used[rankText(r) + d.suit]);
+      html += '<button class="key' + (d.rank === r ? " on" : "") + '" data-act="rank" data-r="' + r + '"' + (free ? "" : " disabled") + ">" + rankText(r) + "</button>";
+    }
+    html += '</div><div class="keys">';
+    SUITS.forEach(function (x) {
+      var free = !d.rank || !used[rankText(d.rank) + x[0]];
+      html += '<button class="key suit' + (isRed(x[0]) ? " red" : "") + (d.suit === x[0] ? " on" : "") + '" data-act="suit" data-s="' + x[0] + '"' +
+        (free ? "" : " disabled") + ">" + x[1] + "</button>";
+    });
+    var current = d.cards[d.slot[0]] && d.cards[d.slot[0]][d.slot[1]];
+    html += '<button class="key plain" data-act="clearcard"' + (current ? "" : " disabled") + ">Clear</button></div>" +
+      '<div class="actions"><button data-act="close">Close</button></div>';
+    return html;
   }
 
   function pokerActions(u) {
@@ -709,8 +823,11 @@ h2 { font-size: 17px; margin: 8px 0 0; }
       body = "<h3>" + esc(p.name) + " (you)</h3>" +
         '<div class="small muted">Chips ' + money(p.balance) + " · bought " + money(p.buyIn) + " · " + signed(p.balance - p.buyIn) + "</div>" +
         '<div class="menu"><button data-act="rename">Rename</button><button data-act="sitout">' +
-        (p.sittingOut ? "Sit back in" : "Sit out from next " + word(data.state)) + '</button><button data-act="rules">Table rules</button></div>' +
+        (p.sittingOut ? "Sit back in" : "Sit out from next " + word(data.state)) + '</button><button data-act="rules">Table rules</button>' +
+        (isPoker(data.state) ? "" : '<button data-act="checker">Which hand wins?</button>') + "</div>" +
         '<div class="actions"><button data-act="close">Close</button></div>';
+    } else if (dialog.kind === "decide") {
+      body = decideBody(dialog);
     } else if (dialog.kind === "rename") {
       body = '<h3>Rename</h3><input id="newName" class="field" maxlength="20" value="' + esc(name) + '">' +
         '<div class="actions"><button data-act="close">Cancel</button><button data-act="saveName">Save</button></div>';
@@ -730,10 +847,11 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         "• Blind players bet the stake. Seen players bet twice the stake (chaal).<br>" +
         "• Raise doubles the stake for everyone after you.<br>" +
         "• Side show: a seen player can ask the previous seen player to compare cards privately. The weaker hand packs.<br>" +
-        "• Show: when 2 players are left, either can pay one bet to show. The host enters who won.</div>") +
+        "• Show: when 2 players are left, either can pay one bet to show. The host enters who won.<br>" +
+        "• Hands from best: trail, pure sequence, sequence, color, pair, high card. A-K-Q is the top sequence, then A-2-3.</div>") +
         '<div class="sig">Made by Afler</div><div class="actions"><button data-act="close">OK</button></div>';
     }
-    overlay.innerHTML = '<div class="scrim" data-act="scrim"><div class="dialog">' + body + "</div></div>";
+    overlay.innerHTML = '<div class="scrim" data-act="scrim"><div class="dialog' + (dialog.kind === "decide" ? " wide" : "") + '">' + body + "</div></div>";
     var input = document.getElementById("newName");
     if (input) input.focus();
   }
@@ -794,6 +912,32 @@ h2 { font-size: 17px; margin: 8px 0 0; }
         break;
       case "confirm": var a = dialog && dialog.action; closeDialog(); if (a) send(a); break;
       case "close": closeDialog(); break;
+      case "decide":
+        var rd = data.state.round, sd = rd && rd.phase === "SIDE_SHOW_COMPARE" ? rd.sideShow : null;
+        var ids = sd ? [sd.requesterId, sd.targetId] : rd ? rd.showdownIds : [];
+        openDecide(sd ? "Decide the side show" : "Decide the show", ids.map(function (id) { return nameOf(data.state, id); }), sd ? 0 : null, false);
+        break;
+      case "checker": openDecide("Which hand wins?", ["Hand 1", "Hand 2"], null, true); break;
+      case "slot": dialog.slot = [+el.getAttribute("data-i"), +el.getAttribute("data-j")]; dialog.rank = null; dialog.suit = null; renderDialog(); break;
+      case "rank":
+        var rk = +el.getAttribute("data-r");
+        if (dialog.suit) placeCard(dialog, { r: rk, s: dialog.suit }); else { dialog.rank = dialog.rank === rk ? null : rk; renderDialog(); }
+        break;
+      case "suit":
+        var su = el.getAttribute("data-s");
+        if (dialog.rank) placeCard(dialog, { r: dialog.rank, s: su }); else { dialog.suit = dialog.suit === su ? null : su; renderDialog(); }
+        break;
+      case "clearcard": dialog.cards[dialog.slot[0]][dialog.slot[1]] = null; dialog.rank = null; dialog.suit = null; askVerdict(dialog); break;
+      case "addhand":
+        dialog.labels.push("Hand " + (dialog.labels.length + 1)); dialog.cards.push([null, null, null]);
+        dialog.slot = firstEmpty(dialog); askVerdict(dialog);
+        break;
+      case "delhand":
+        var di = +el.getAttribute("data-i");
+        dialog.labels.splice(di, 1); dialog.cards.splice(di, 1);
+        dialog.labels = dialog.labels.map(function (l, k) { return "Hand " + (k + 1); });
+        dialog.slot = firstEmpty(dialog) || [0, 0]; askVerdict(dialog);
+        break;
       case "scrim": if (e.target === el) closeDialog(); break;
     }
   });

@@ -26,6 +26,9 @@ with the same name and take over that seat, chips and all. Browser players show 
 A new APK is built automatically for every change pushed to `main`. It installs over the previous
 one and keeps your data.
 
+A Google Play version is being prepared; see [store/PLAY_STORE.md](store/PLAY_STORE.md). It is a
+separate app, so it can sit next to the APK, and both play at the same table.
+
 ## How to play
 
 1. **Connect the phones.** Everyone joins the same WiFi, or the host turns on their phone's hotspot and
@@ -49,6 +52,9 @@ one and keeps your data.
 5. **Results.** For a show, side show or poker showdown, compare cards on the table and the host taps
    who won. With side pots the host picks the winner of each pot, main pot first. The chips go to the
    winners automatically.
+   Not sure who won a 3 Patti show or side show? Tap **Not sure? Decide from the cards**, enter everyone's
+   3 cards and the app names each hand and the winner; the host can then give the pot in one tap.
+   **⋮ → Which hand wins?** checks any hands at any time.
 6. **Settle up.** The **Ledger** tab shows everyone's chips and profit or loss, and a **Settle up** list
    of who pays whom.
 
@@ -70,6 +76,24 @@ one and keeps your data.
 The winner of each round deals the next one, so the player sitting after the winner goes first. If the winner
 sits out, the player after their seat still goes first. With a split pot, the winner who comes first after
 that round's dealer deals. Players who can't pay the boot, or who sit out, are skipped.
+
+### Hand rankings (Decide winner)
+
+From highest to lowest:
+
+| Hand | Example |
+| --- | --- |
+| Trail (three of a kind) | A A A is the highest, 2 2 2 the lowest |
+| Pure sequence (same suit) | A-K-Q ♠ |
+| Sequence | Q-J-10 in mixed suits |
+| Color (same suit) | K-9-4 ♥ |
+| Pair | 7 7 K |
+| High card | A-J-5 |
+
+A-K-Q is the highest sequence and A-2-3 the second highest; after that sequences go by their top card,
+down to 4-3-2. Equal hands of the same type are compared card by card, highest first; a pair is
+compared by the pair, then the third card. When hands are exactly equal, a show splits the pot and in a
+side show the player who asked for it packs.
 
 ## Poker betting rules
 
@@ -125,15 +149,18 @@ Works for Texas Hold'em, Omaha and other flop games; the host picks **No limit**
 Requirements: JDK 17 and the Android SDK (Android Studio installs both).
 
 ```bash
-./gradlew :core:test              # game rules and networking tests
-./gradlew :app:assembleRelease    # APK in app/build/outputs/apk/release/
+./gradlew :core:test                    # game rules and networking tests
+./gradlew :app:assembleGithubRelease    # APK in app/build/outputs/apk/github/release/
+./gradlew :app:bundlePlayRelease        # Play Store bundle in app/build/outputs/bundle/playRelease/
 ```
 
 Or open the folder in Android Studio and press Run.
 
-The APK is signed with the key in `app/signing/` so that builds from GitHub Actions or any computer
-can update each other on the phones. It is only meant for sharing this app with friends. Anyone with
-the repository can sign an update, so don't reuse this key for anything else.
+The GitHub APK is signed with the key in `app/signing/` so that builds from GitHub Actions or any
+computer can update each other on the phones. It is only meant for sharing this app with friends.
+Anyone with the repository can sign an update, so don't reuse this key for anything else. The Play
+Store bundle is signed with a private upload key that is never in the repository; see
+[store/PLAY_STORE.md](store/PLAY_STORE.md).
 
 ## Project layout
 

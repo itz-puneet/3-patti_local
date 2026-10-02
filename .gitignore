@@ -14,3 +14,7 @@ captures/
 # OS
 .DS_Store
 Thumbs.db
+
+# The Play upload key must never be committed (see store/PLAY_STORE.md).
+*.jks
+upload-keystore*

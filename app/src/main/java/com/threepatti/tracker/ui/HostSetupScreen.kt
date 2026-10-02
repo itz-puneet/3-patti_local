@@ -333,6 +333,7 @@ fun RulesText(settings: TableSettings) {
             "Raise doubles the stake for everyone after you.",
             "Side show: a seen player can ask the previous seen player to compare cards privately. The weaker hand packs.",
             "Show: when 2 players are left, either can pay one bet to show. The host enters who won.",
+            "Hands from best: trail, pure sequence, sequence, color, pair, high card. A-K-Q is the top sequence, then A-2-3.",
         )
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -3,6 +3,7 @@ package com.threepatti.core
 import com.threepatti.core.GameAction.Bet
 import com.threepatti.core.GameAction.RemovePlayer
 import com.threepatti.core.GameAction.StartRound
+import com.threepatti.core.net.CompareResult
 import com.threepatti.core.net.WebGoodbye
 import com.threepatti.core.net.WebResult
 import com.threepatti.core.net.WebServer
@@ -76,15 +77,19 @@ class WebServerTest {
         override fun close() = socket.close()
     }
 
-    private fun post(path: String, body: String): WebResult {
+    private fun post(path: String, body: String): WebResult = Wire.json.decodeFromString(WebResult.serializer(), postText(path, body))
+
+    private fun postText(path: String, body: String): String {
         val connection = URI("http://127.0.0.1:${server.port}$path").toURL().openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.doOutput = true
         connection.setRequestProperty("Content-Type", "application/json")
         connection.outputStream.use { it.write(body.toByteArray()) }
         val stream = if (connection.responseCode < 400) connection.inputStream else connection.errorStream
-        return Wire.json.decodeFromString(WebResult.serializer(), stream.bufferedReader().readText())
+        return stream.bufferedReader().readText()
     }
+
+    private fun compare(body: String) = Wire.json.decodeFromString(CompareResult.serializer(), postText("/compare", body))
 
     private fun ping(device: String) {
         val connection = URI("http://127.0.0.1:${server.port}/ping?device=$device").toURL().openConnection() as HttpURLConnection
@@ -92,6 +97,23 @@ class WebServerTest {
         connection.doOutput = true
         connection.outputStream.use { }
         assertEquals(204, connection.responseCode)
+    }
+
+    @Test
+    fun comparesHandsForTheDecideWinnerScreen() {
+        server.start()
+        val show = compare("""{"hands":[["KS","KH","2D"],["9C","8C","7C"],["AS","JH","5D"]]}""")
+        assertEquals(listOf("Pair of Kings + 2", "Pure sequence 9-8-7", "High card A-J-5"), show.names)
+        assertEquals(listOf(1), show.winners)
+        val sideShowTie = compare("""{"hands":[["AS","JH","5D"],["AH","JD","5C"]],"sideShowAsker":0}""")
+        assertEquals(listOf(1), sideShowTie.winners)
+        assertEquals("Equal hands: the player who asked for the side show packs", sideShowTie.note)
+        // A hand is named as soon as it has 3 cards; the winner only once every hand does.
+        val partial = compare("""{"hands":[["QS","QH","4D"],["2C"]]}""")
+        assertEquals(listOf("Pair of Queens + 4", null), partial.names)
+        assertTrue(partial.winners.isEmpty())
+        assertEquals("A♠ is entered twice", compare("""{"hands":[["AS","KH","2D"],["AS","3H","4D"]]}""").error)
+        assertEquals("Unknown card ZZ", compare("""{"hands":[["ZZ"]]}""").error)
     }
 
     @Test

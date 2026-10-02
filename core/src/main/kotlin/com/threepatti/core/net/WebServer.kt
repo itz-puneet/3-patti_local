@@ -1,7 +1,9 @@
 package com.threepatti.core.net
 
 import com.threepatti.core.Actor
+import com.threepatti.core.Card
 import com.threepatti.core.GameAction
+import com.threepatti.core.GameRuleException
 import com.threepatti.core.GameState
 import com.threepatti.core.PokerOptions
 import com.threepatti.core.PokerRules
@@ -9,8 +11,10 @@ import com.threepatti.core.Rules
 import com.threepatti.core.SeatOptions
 import com.threepatti.core.Settlement
 import com.threepatti.core.TableHost
+import com.threepatti.core.TeenPatti
 import com.threepatti.core.Transfer
 import com.threepatti.core.describeRound
+import com.threepatti.core.fail
 import com.threepatti.core.nextDealText
 import com.threepatti.core.summary
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +55,23 @@ data class WebUpdate(
 
 @Serializable
 data class WebResult(val ok: Boolean, val error: String? = null)
+
+/** Cards entered on the browser's Decide winner screen: card codes such as "AS" for each hand. */
+@Serializable
+data class CompareRequest(val hands: List<List<String>>, val sideShowAsker: Int? = null)
+
+/**
+ * The name of each hand that has all 3 cards (null for the others) and, once every hand is complete,
+ * the winners by position.
+ */
+@Serializable
+data class CompareResult(
+    val ok: Boolean,
+    val names: List<String?> = emptyList(),
+    val winners: List<Int> = emptyList(),
+    val note: String? = null,
+    val error: String? = null,
+)
 
 @Serializable
 data class WebGoodbye(val message: String)
@@ -131,6 +152,7 @@ class WebServer(
                 request.method == "GET" && request.path == "/events" -> serveEvents(socket, out, request)
                 request.method == "POST" && request.path == "/action" -> handleAction(out, request)
                 request.method == "POST" && request.path == "/ping" -> handlePing(out, request)
+                request.method == "POST" && request.path == "/compare" -> handleCompare(out, request)
                 else -> respond(out, 404, "text/plain; charset=utf-8", "Not found".toByteArray())
             }
         } catch (e: IOException) {
@@ -201,6 +223,21 @@ class WebServer(
         }
         val error = table.perform(action, Actor.Remote(playerId))
         respondJson(out, 200, WebResult(error == null, error))
+    }
+
+    private fun handleCompare(out: OutputStream, request: Request) {
+        val result = runCatching {
+            val input = Wire.json.decodeFromString(CompareRequest.serializer(), request.body.toString(Charsets.UTF_8))
+            val hands = input.hands.map { codes -> codes.map { Card.parse(it) ?: fail("Unknown card $it") } }
+            val names = hands.map { if (it.size == 3) TeenPatti.evaluate(it).name else null }
+            if (hands.any { it.size != 3 }) {
+                CompareResult(true, names)
+            } else {
+                val verdict = TeenPatti.decide(hands.withIndex().associate { it.index to it.value }, input.sideShowAsker)
+                CompareResult(true, names, verdict.winners, verdict.note)
+            }
+        }.getOrElse { CompareResult(false, error = (it as? GameRuleException)?.message ?: "Couldn't read the cards") }
+        respond(out, 200, "application/json; charset=utf-8", Wire.json.encodeToString(CompareResult.serializer(), result).toByteArray())
     }
 
     private fun handlePing(out: OutputStream, request: Request) {
