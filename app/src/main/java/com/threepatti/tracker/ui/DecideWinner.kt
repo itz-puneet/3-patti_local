@@ -14,10 +14,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
@@ -56,8 +55,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.threepatti.core.Card
 import com.threepatti.core.GameRuleException
 import com.threepatti.core.HandRules
@@ -88,13 +85,11 @@ fun DecideWinnerDialog(
     initialVariant: Variant = Variant.CLASSIC,
     initialJokerRanks: Set<Int> = emptySet(),
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-            DecideWinnerContent(
-                title, seats, sideShowAsker, canAddHands, declareText, onDeclare, onDismiss,
-                initialCards, initialVariant, initialJokerRanks,
-            )
-        }
+    FullScreenDialog(onDismissRequest = onDismiss) {
+        DecideWinnerContent(
+            title, seats, sideShowAsker, canAddHands, declareText, onDeclare, onDismiss,
+            initialCards, initialVariant, initialJokerRanks,
+        )
     }
 }
 
@@ -160,7 +155,7 @@ fun DecideWinnerContent(
     val nextHand = remember { BringIntoViewRequester() }
     LaunchedEffect(slot?.first) { if (slot != null) nextHand.bringIntoView() }
 
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Close") }

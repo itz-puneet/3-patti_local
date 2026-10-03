@@ -9,10 +9,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,8 +38,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.threepatti.core.Card
 import com.threepatti.core.GameState
 import com.threepatti.core.HandRules
@@ -74,10 +71,8 @@ fun MyCardsDialog(
     onSave: (List<Card>) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-            MyCardsContent(title, hint, initial, rules, dismissLabel, onSave, onDismiss)
-        }
+    FullScreenDialog(onDismissRequest = onDismiss) {
+        MyCardsContent(title, hint, initial, rules, dismissLabel, onSave, onDismiss)
     }
 }
 
@@ -110,7 +105,7 @@ fun MyCardsContent(
         cards = cards.toMutableList().also { it[index] = card }
         slot = cards.indexOfFirst { it == null }.takeIf { it >= 0 }
     }
-    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    Column(Modifier.fillMaxSize().safeDrawingPadding()) {
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
             IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = dismissLabel) }
